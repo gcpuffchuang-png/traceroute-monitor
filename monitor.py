@@ -3,14 +3,8 @@ import json
 import re
 import sys
 import datetime
+import requests
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-
-# 引入 scapy 網路套件（需在 actions 中 pip install scapy）
-# 停用 scapy 的警告訊息，保持 log 乾淨
-import logging
-logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-from scapy.all import IP, TCP, sr1
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE = BASE_DIR / "index_template.html"
@@ -18,49 +12,46 @@ OUTPUT = BASE_DIR / "index.html"
 BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
-IPS = [
-    "111.71.0.8",
-    "111.71.212.8",
-    "111.71.213.8",
-    "111.71.214.8",
-    "111.71.215.8",
-    "111.71.64.8"
-]
+IPS = ["111.71.0.8", "111.71.212.8", "111.71.213.8", "111.71.214.8", "111.71.215.8", "111.71.64.8"]
 BR_NAME = "2L3BR3"
-
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-def python_tcp_traceroute(ip, port=80, max_hops=20):
+def fetch_external_traceroute(ip):
     """
-    使用純 Python Scapy 實作的 TCP Traceroute
-    可以在 GitHub Actions 的嚴格環境下穿透並抓取 Hops
+    呼叫 HackerTarget 免費的網路診斷 API。
+    這是在外部獨立節點跑的真實 Traceroute，不受 GitHub Actions 內部網路防火牆限制。
     """
-    log_lines = []
-    log_lines.append(f"traceroute to {ip}, {max_hops} hops max, via Python TCP Port {port}")
-    
+    url = f"https://hackertarget.com{ip}"
+    try:
+        response = requests.get(url, timeout=20)
+        if response.status_code == 200 and "Error" not in response.text:
+            return response.text
+        else:
+            return f"API 回傳錯誤或超出流量限制: {response.text}"
+    except Exception as e:
+        return f"連線至外部探針 API 失敗: {e}"
+
+def parse_mtr_result(mtr_out):
+    """
+    解析 HackerTarget MTR (My Traceroute) 的標準輸出格式：
+    格式範例: "1.|-- 192.168.1.1  0.0%    1    0.5   0.5   0.5   0.0"
+    """
     last_ip = None
     last_hop = 0
+    lines = mtr_out.splitlines()
     
-    for ttl in range(1, max_hops + 1):
-        # 建立一個合法的 TCP SYN 封包，並逐次遞增 TTL
-        pkt = IP(dst=ip, ttl=ttl) / TCP(dport=port, flags="S")
-        
-        # 發送封包並等待回應 (等待 1.5 秒)
-        reply = sr1(pkt, verbose=0, timeout=1.5)
-        
-        if reply is None:
-            log_lines.append(f" {ttl}  *")
-        else:
-            hop_ip = reply.src
-            log_lines.append(f" {ttl}  {hop_ip}")
-            last_hop = ttl
-            last_ip = hop_ip
+    # 匹配類似 "1.|-- 210.65.126.93" 或 "12:|-- 210.65.126.93" 的格式
+    mtr_re = re.compile(r"^\s*(\d+)[:\.]\|--\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)")
+    
+    for line in lines:
+        m = mtr_re.match(line)
+        if m:
+            hop = int(m.group(1))
+            ip = m.group(2)
+            last_hop = hop
+            last_ip = ip
             
-            # 如果回應的來源 IP 就是目標 IP，代表已經安全抵達終點，提早結束
-            if hop_ip == ip:
-                break
-                
-    return last_hop, last_ip, "\n".join(log_lines)
+    return last_hop, last_ip
 
 def load_baseline():
     if BASELINE_FILE.exists():
@@ -73,11 +64,11 @@ def save_baseline(data):
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
     if baseline is None:
-        diff_text = "(基準建立)"
         judgement = ("text-emerald-400", "✓", "基準建立")
         reached_br = ("text-emerald-400", "✓", br_name)
+        status_text = "基準已建立"
     else:
-        diff = current['hop'] - baseline['hop'] if baseline and current['hop'] is not None else 0
+        diff = current['hop'] - baseline['hop'] if current['hop'] is not None else 0
         diff_sign = f"{'+' if diff>0 else ''}{diff}"
         if current['ip'] and baseline.get('ip') and (current['ip'] == baseline.get('ip')):
             reached_br = ("text-emerald-400", "✓", br_name)
@@ -86,14 +77,13 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
         else:
             reached_br = ("text-rose-400", "✕", "未抵達 BR")
             judgement = ("text-rose-400", "✕", "異常")
-            status_text = f"最後回應 {current['ip']}" if current['ip'] else "無回應 / 未抵達 BR"
+            status_text = f"最後回應 {current['ip']}" if current['ip'] else "無回應 / 路由中斷"
 
     ip_cell = f"<div class='text-sm ip-mono text-cyan-300 font-semibold'>{ip}</div><div class='text-xs text-slate-400'>{net}</div>"
     component_cell = f"<div class='text-sm'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
     
     if baseline is None:
         hop_cell = f"<div class='text-sm font-medium'>{current['hop'] if current['hop'] else '-'}</div><div class='text-xs text-slate-400'>(基準建立)</div>"
-        status_text = "基準已建立"
     else:
         diff = current['hop'] - baseline['hop'] if current['hop'] is not None else 0
         diff_sign = f"{'+' if diff>0 else ''}{diff}"
@@ -103,11 +93,11 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
     last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>路由資訊</div>"
     
     reached_cls, reached_icon, reached_label = reached_br if baseline is not None else ("text-emerald-400","✓", br_name)
-    reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><svg class='w-4 h-4' fill='none' stroke='currentColor' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='{ 'M5 13l4 4L19 7' if reached_icon=='✓' else 'M6 18L18 6M6 6l12 12' }' /></svg><span>{reached_label}</span></div>"
+    reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><span>{reached_label}</span></div>"
     
     status_cell = f"<div class='text-sm'>{status_text}</div>"
-    judgement_cls, judgement_icon, judgement_label = judgement if baseline is not None else ("text-emerald-400","✓","基準")
-    judgement_cell = f"<div class='inline-flex items-center gap-2 {judgement_cls} font-semibold'><span>{judgement_icon}</span><span>{judgement_label}</span></div>"
+    judgement_cls, _, judgement_label = judgement if baseline is not None else ("text-emerald-400","✓","基準")
+    judgement_cell = f"<div class='inline-flex items-center gap-2 {judgement_cls} font-semibold'><span>{judgement_label}</span></div>"
 
     log_file = f"logs/{ip}.log"
     view_btn = f"<a class='px-3 py-1 text-sm text-sky-500 bg-sky-900/30 rounded-md hover:bg-sky-800/40 transition' href='{log_file}' target='_blank'>查看</a>"
@@ -124,11 +114,6 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
       <td class="px-4 py-4 text-center">{view_btn}</td>
     </tr>
     """
-
-def worker(ip):
-    """供執行緒池呼叫的單一任務"""
-    hop, last_ip, tr_out = python_tcp_traceroute(ip)
-    return ip, hop, last_ip, tr_out
 
 def main():
     baseline = load_baseline()
@@ -147,23 +132,22 @@ def main():
         "111.71.64.8": ("111.71.64.0/24", "3L1EPG6", "NAT7/8"),
     }
 
-    # 在 GitHub Actions 環境中，因為 scapy 的 Socket 建立需要 root，平行處理要謹慎。
-    # 這裡我們一樣採用 6 個 threads 平行探測
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(worker, ip) for ip in IPS]
-        
-    for f in futures:
-        ip, hop, last_ip, tr_out = f.result()
+    # 外部 API 有每分鐘調用頻率限制，這裡改用依序執行（不使用 ThreadPool），避免被 API 阻斷
+    for ip in IPS:
+        print(f"正在透過外部探針路由巡檢 IP: {ip} ...")
+        tr_out = fetch_external_traceroute(ip)
         
         log_path = LOG_DIR / f"{ip}.log"
-        log_path.write_text(f"=== {now} Python TCP Traceroute to {ip} ===\n\n{tr_out}\n", encoding='utf-8')
+        log_path.write_text(f"=== {now} External Probe MTR to {ip} ===\n\n{tr_out}\n", encoding='utf-8')
 
+        hop, last_ip = parse_mtr_result(tr_out)
         current = {"hop": hop, "ip": last_ip, "raw": tr_out, "ts": now}
         bl = baseline.get(ip)
         
         if bl is None:
-            baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
-            save_baseline(baseline)
+            if current['hop'] > 0: # 有成功拿到外部路由才建立基準
+                baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
+                save_baseline(baseline)
             ok_count += 1
             row = build_row_html(ip, meta_map[ip][0], meta_map[ip][1], meta_map[ip][2], None, current)
         else:
@@ -185,6 +169,7 @@ def main():
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
+    print(f"巡檢完成。成功: {ok_count}, 異常: {bad_count}")
 
 if __name__ == "__main__":
     main()
