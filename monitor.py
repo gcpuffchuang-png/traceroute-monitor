@@ -18,7 +18,7 @@ IPS = ["111.71.0.8", "111.71.212.8", "111.71.213.8", "111.71.214.8", "111.71.215
 BR_NAME = "2L3BR3"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-def native_tcp_traceroute(target_ip, port=80, max_hops=20, timeout=1.5):
+def native_tcp_traceroute(target_ip, port=443, max_hops=20, timeout=1.5):
     """
     使用 Linux 內建核心 Socket 發起合法的 TCP SYN 請求。
     藉由逐步調高生存時間 (TTL)，在 GitHub Actions 環境內安全穿透並攔截 Hop IP。
