@@ -2,9 +2,8 @@ name: IP Traceroute Monitor Panel
 
 on:
   schedule:
-    # 國際標準時間 (UTC) 每 30 分鐘執行一次
     - cron: '*/30 * * * *'
-  workflow_dispatch: # 允許您在 GitHub 網頁上手動點擊立即執行
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,14 +23,9 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: 安裝系統依賴 (Traceroute)
+    - name: 安裝 Python 依賴套件
       run: |
-        sudo apt-get update
-        sudo apt-get install -y traceroute
-
-    - name: 安裝 Python 依賴套件 (Scapy)
-      run: |
-        pip install scapy requests
+        pip install requests
 
     - name: 恢復歷史數據快取 (Baseline, Logs, HTML)
       id: cache-data
@@ -46,7 +40,7 @@ jobs:
         restore-keys: |
           mtr-panel-data-
 
-    - name: 執行 Traceroute 監控
+    - name: 執行 100% 穿透型 TCP 路由監控
       run: python monitor.py
 
     - name: 儲存最新數據快取
@@ -63,7 +57,7 @@ jobs:
     - name: 上傳網頁構件
       uses: actions/upload-pages-artifact@v3
       with:
-        path: '.' # 將包含產出 index.html 與 logs/ 的根目錄打包
+        path: '.'
 
     - name: 部署至 GitHub Pages
       uses: actions/deploy-pages@v4
