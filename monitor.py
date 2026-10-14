@@ -26,7 +26,7 @@ IPS = [
     "111.71.64.8"
 ]
 BR_NAME = "2L3BR3"   # 若達到基準的最後一跳，顯示的 BR 名稱（可自行修改）
-TRACEROUTE_CMD = ["traceroute", "-n", "-w", "2", "-q", "1", "-m", "30"]  # 假設 Linux 環境
+TRACEROUTE_CMD = ["sudo","traceroute", "-n", "-T", "-p", "80", "-w", "2", "-q", "1", "-m", "20"]  # 假設 Linux 環境
 
 # 確保 log 目錄存在
 LOG_DIR.mkdir(parents=True, exist_ok=True)
