@@ -1,0 +1,66 @@
+name: IP Traceroute Monitor Panel
+
+on:
+  schedule:
+    # 國際標準時間 (UTC) 每 30 分鐘執行一次
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # 允許您在 GitHub 網頁上手動點擊立即執行
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 檢出程式碼
+      uses: actions/checkout@v4
+
+    - name: 設定 Python 環境
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: 安裝系統依賴 (Traceroute)
+      # 腳本使用的是傳統 Linux 的 traceroute 指令
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y traceroute
+
+    - name: 恢復歷史數據快取 (Baseline, Logs, HTML)
+      id: cache-data
+      uses: actions/cache@v4
+      with:
+        path: |
+          baseline.json
+          index.html
+          results.json
+          logs/
+        key: mtr-panel-data-${{ github.run_id }}
+        restore-keys: |
+          mtr-panel-data-
+
+    - name: 執行 Traceroute 監控
+      run: python monitor.py
+
+    - name: 儲存最新數據快取
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          baseline.json
+          index.html
+          results.json
+          logs/
+        key: mtr-panel-data-${{ github.run_id }}
+
+    - name: 上傳網頁構件
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: '.' # 將包含產出 index.html 與 logs/ 的根目錄打包
+
+    - name: 部署至 GitHub Pages
+      uses: actions/deploy-pages@v4
