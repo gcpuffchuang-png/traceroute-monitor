@@ -47,7 +47,7 @@ jobs:
           mtr-panel-data-
 
     - name: 執行 Traceroute 監控
-      run: sudo $(which python) monitor.py
+      run: python monitor.py
 
     - name: 儲存最新數據快取
       if: always()
