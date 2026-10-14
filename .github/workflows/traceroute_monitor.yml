@@ -25,10 +25,13 @@ jobs:
         python-version: '3.10'
 
     - name: 安裝系統依賴 (Traceroute)
-      # 腳本使用的是傳統 Linux 的 traceroute 指令
       run: |
         sudo apt-get update
         sudo apt-get install -y traceroute
+
+    - name: 安裝 Python 依賴套件 (Scapy)
+      run: |
+        pip install scapy requests
 
     - name: 恢復歷史數據快取 (Baseline, Logs, HTML)
       id: cache-data
