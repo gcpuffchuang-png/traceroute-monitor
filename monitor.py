@@ -19,16 +19,22 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 def fetch_external_traceroute(ip):
     """
     呼叫 IP2Location 免費的網路 MTR 探針 API。
+    改用標準 params 傳參，徹底根除 Python 底層 URL 解析的錯位 Bug。
     """
-    url = f"https://ip2location.io{ip}"
+    # 網址保持乾淨的網域，不要把 IP 寫在字串裡
+    url = "https://ip2location.io"
+    payload = {"ip": ip} # 將 IP 放入標準字典中
+    
     try:
-        response = requests.get(url, timeout=25)
+        # 使用 params=payload 讓 Python 自動進行安全的網址組裝
+        response = requests.get(url, params=payload, timeout=25)
         if response.status_code == 200:
             return response.text
         else:
             return f"API 連線失敗，狀態碼: {response.status_code}，訊息: {response.text}"
     except Exception as e:
         return f"連線至外部探針 API 失敗: {e}"
+
 
 def parse_mtr_result(mtr_out):
     """
