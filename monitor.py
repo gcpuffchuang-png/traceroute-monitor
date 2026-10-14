@@ -18,16 +18,18 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_external_traceroute(ip):
     """
-    呼叫 HackerTarget 免費的網路診斷 API。
-    這是在外部獨立節點跑的真實 Traceroute，不受 GitHub Actions 內部網路防火牆限制。
+    換成 IP2Location 免費的網路 MTR 探針 API。
+    這可以在外部獨立節點跑出真實的 Traceroute，格式更穩定。
     """
-    url = f"https://hackertarget.com{ip}"
+    # 使用最新穩定的外部巡檢 API 網址
+    url = f"https://ip2location.io{ip}"
     try:
-        response = requests.get(url, timeout=20)
-        if response.status_code == 200 and "Error" not in response.text:
+        response = requests.get(url, timeout=25)
+        if response.status_code == 200:
+            # 成功取得外部 MTR 路由文字
             return response.text
         else:
-            return f"API 回傳錯誤或超出流量限制: {response.text}"
+            return f"API 連線失敗，狀態碼: {response.status_code}，訊息: {response.text}"
     except Exception as e:
         return f"連線至外部探針 API 失敗: {e}"
 
