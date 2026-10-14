@@ -18,15 +18,12 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_external_traceroute(ip):
     """
-    換成 IP2Location 免費的網路 MTR 探針 API。
-    這可以在外部獨立節點跑出真實的 Traceroute，格式更穩定。
+    呼叫 IP2Location 免費的網路 MTR 探針 API。
     """
-    # 使用最新穩定的外部巡檢 API 網址
     url = f"https://ip2location.io{ip}"
     try:
         response = requests.get(url, timeout=25)
         if response.status_code == 200:
-            # 成功取得外部 MTR 路由文字
             return response.text
         else:
             return f"API 連線失敗，狀態碼: {response.status_code}，訊息: {response.text}"
@@ -35,14 +32,11 @@ def fetch_external_traceroute(ip):
 
 def parse_mtr_result(mtr_out):
     """
-    解析 HackerTarget MTR (My Traceroute) 的標準輸出格式：
-    格式範例: "1.|-- 192.168.1.1  0.0%    1    0.5   0.5   0.5   0.0"
+    解析 MTR 的標準輸出格式並提取 Last Hop。
     """
     last_ip = None
     last_hop = 0
     lines = mtr_out.splitlines()
-    
-    # 匹配類似 "1.|-- 210.65.126.93" 或 "12:|-- 210.65.126.93" 的格式
     mtr_re = re.compile(r"^\s*(\d+)[:\.]\|--\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)")
     
     for line in lines:
@@ -94,7 +88,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
     last_node = current['ip'] if current['ip'] else "<span class='text-rose-300'>無回應</span>"
     last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>路由資訊</div>"
     
-    reached_cls, reached_icon, reached_label = reached_br if baseline is not None else ("text-emerald-400","✓", br_name)
+    reached_cls, _, reached_label = reached_br if baseline is not None else ("text-emerald-400","✓", br_name)
     reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><span>{reached_label}</span></div>"
     
     status_cell = f"<div class='text-sm'>{status_text}</div>"
@@ -125,18 +119,18 @@ def main():
     bad_count = 0
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # 這裡修正了先前導致錯位的參數映射關係
     meta_map = {
-        "111.71.0.8": ("111.71.0.0/17 (前半)", "3L1EPG1", "NAT7/8"),
-        "111.71.212.8": ("111.71.212.0/23 (前半)", "2L3EPG1", "NAT7/8"),
-        "111.71.213.8": ("111.71.212.0/23 (後半)", "2L3EPG1", "NAT7/8"),
-        "111.71.214.8": ("111.71.214.0/23 (前半)", "3L1EPG1", "NAT7/8"),
-        "111.71.215.8": ("111.71.214.0/23 (後半)", "3L1EPG1", "NAT7/8"),
-        "111.71.64.8": ("111.71.64.0/24", "3L1EPG6", "NAT7/8"),
+        "111.71.0.8": {"net": "111.71.0.0/17 (前半)", "comp": "3L1EPG1", "group": "NAT7/8"},
+        "111.71.212.8": {"net": "111.71.212.0/23 (前半)", "comp": "2L3EPG1", "group": "NAT7/8"},
+        "111.71.213.8": {"net": "111.71.212.0/23 (後半)", "comp": "2L3EPG1", "group": "NAT7/8"},
+        "111.71.214.8": {"net": "111.71.214.0/23 (前半)", "comp": "3L1EPG1", "group": "NAT7/8"},
+        "111.71.215.8": {"net": "111.71.214.0/23 (後半)", "comp": "3L1EPG1", "group": "NAT7/8"},
+        "111.71.64.8": {"net": "111.71.64.0/24", "comp": "3L1EPG6", "group": "NAT7/8"},
     }
 
-    # 外部 API 有每分鐘調用頻率限制，這裡改用依序執行（不使用 ThreadPool），避免被 API 阻斷
     for ip in IPS:
-        print(f"正在透過外部探針路由巡檢 IP: {ip} ...")
+        print(f"正在連線外部探針巡檢 IP: {ip} ...")
         tr_out = fetch_external_traceroute(ip)
         
         log_path = LOG_DIR / f"{ip}.log"
@@ -146,18 +140,19 @@ def main():
         current = {"hop": hop, "ip": last_ip, "raw": tr_out, "ts": now}
         bl = baseline.get(ip)
         
+        meta = meta_map[ip]
         if bl is None:
-            if current['hop'] > 0: # 有成功拿到外部路由才建立基準
+            if current['hop'] > 0:
                 baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
                 save_baseline(baseline)
             ok_count += 1
-            row = build_row_html(ip, meta_map[ip][0], meta_map[ip][1], meta_map[ip][2], None, current)
+            row = build_row_html(ip, meta["net"], meta["comp"], meta["group"], None, current)
         else:
             if current['ip'] and bl.get('ip') and current['ip'] == bl.get('ip'):
                 ok_count += 1
             else:
                 bad_count += 1
-            row = build_row_html(ip, meta_map[ip][0], meta_map[ip][1], meta_map[ip][2], bl, current)
+            row = build_row_html(ip, meta["net"], meta["comp"], meta["group"], bl, current)
         rows.append(row)
         results[ip] = {"baseline": baseline.get(ip), "current": current}
 
