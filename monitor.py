@@ -18,22 +18,32 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_external_traceroute(ip):
     """
-    呼叫 IP2Location 免費的網路 MTR 探針 API。
-    改用標準 params 傳參，徹底根除 Python 底層 URL 解析的錯位 Bug。
+    呼叫 HackerTarget 免費的網路 MTR 探針 API。
+    已整合 params 傳參防止字串黏貼錯位，並補上 headers 穿透 Cloudflare 403 阻擋。
     """
-    # 網址保持乾淨的網域，不要把 IP 寫在字串裡
-    url = "https://ip2location.io"
-    payload = {"ip": ip} # 將 IP 放入標準字典中
+    # 網址保持乾淨無參數
+    url = "https://hackertarget.com"
+    
+    # 標準參數字典，徹底與網域切開
+    payload = {"q": ip}
+    
+    # 模擬標準 Chrome 瀏覽器標頭
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+    }
     
     try:
-        # 使用 params=payload 讓 Python 自動進行安全的網址組裝
-        response = requests.get(url, params=payload, timeout=25)
+        # 同時發送乾淨網址、參數字典、與偽裝標頭
+        response = requests.get(url, params=payload, headers=headers, timeout=25)
         if response.status_code == 200:
             return response.text
         else:
-            return f"API 連線失敗，狀態碼: {response.status_code}，訊息: {response.text}"
+            return f"API 連線失敗，狀態碼: {response.status_code}，訊息: {response.text[:200]}"
     except Exception as e:
         return f"連線至外部探針 API 失敗: {e}"
+
 
 
 def parse_mtr_result(mtr_out):
