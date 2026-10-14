@@ -41,7 +41,7 @@ jobs:
           mtr-panel-data-
 
     - name: 執行 100% 穿透型 TCP 路由監控
-      run: python monitor.py
+      run: sudo python monitor.py
 
     - name: 儲存最新數據快取
       if: always()
