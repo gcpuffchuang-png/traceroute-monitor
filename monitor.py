@@ -19,45 +19,46 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute(ip):
     """
-    呼叫 Globalping API，指定使用台灣(Taiwan)的探針發起真實的 Traceroute。
+    呼叫 Globalping 最新標準的單一 GET 即時查詢端點。
+    直接用 GET 帶入參數，避開所有 405 POST 權限限制，一步到位抓回台灣探針資料。
     """
-    api_url = "https://globalping.io"
+    # 官方針對自動化維運最新開放的單一查詢網址
+    url = "https://globalping.io"
     
+    # 將所有需求用標準 params 字典封裝，走網頁最標準的 GET 協定
     payload = {
         "type": "traceroute",
         "target": ip,
-        "locations": [{"country": "TW"}],
-        "limit": 1
+        "location": "TW",     # 指定台灣實體探針
+        "download": "true"    # 強制要求直接下載純文字結果
     }
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json, text/plain, */*"
     }
     
     try:
-        # 1. 建立測試任務 (POST)
-        response = requests.post(api_url, json=payload, headers=headers, timeout=15)
-        if response.status_code != 202:
-            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}"
+        print(f"[Globalping] 正在發送即時 GET 巡檢請求 (目標: {ip})...")
+        # 直接使用 GET 請求，API 伺服器會在線上同步等待台灣探針執行完畢 (大約 5-10 秒) 後直接回傳
+        response = requests.get(url, params=payload, headers=headers, timeout=30)
         
-        task_id = response.json().get("id")
-        result_url = f"https://globalping.io/{task_id}"
-        
-        # 2. 輪詢獲取結果 (GET)
-        for _ in range(12):
-            time.sleep(2)
-            res = requests.get(result_url, headers=headers, timeout=15)
-            if res.status_code == 200:
-                data = res.json()
-                if data.get("status") == "finished":
-                    results = data.get("results", [])
-                    if results and len(results) > 0:
-                        return results[0].get("result", {}).get("rawOutput", "無輸出結果")
-        return "Globalping 測試逾時，台灣探針未能及時回傳路由資料。"
+        if response.status_code == 200:
+            # 成功直接抓到回傳的路由純文字或 JSON
+            try:
+                # 嘗試解析看看是不是 JSON 包裹的物件
+                data = response.json()
+                if isinstance(data, dict):
+                    return data.get("result", {}).get("rawOutput", "無輸出結果")
+            except:
+                # 如果直接回傳的就是純文字，直接返回
+                return response.text
+        else:
+            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}，訊息: {response.text[:100]}"
+            
     except Exception as e:
         return f"連線至 Globalping API 失敗: {e}"
+
 
 def parse_globalping_mtr(raw_out):
     """
