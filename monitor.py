@@ -1,12 +1,11 @@
 import os
 import json
-import socket
-import struct
-import select
+import re
 import sys
 import datetime
+import time
+import requests
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE = BASE_DIR / "index_template.html"
@@ -18,91 +17,65 @@ IPS = ["111.71.0.8", "111.71.212.8", "111.71.213.8", "111.71.214.8", "111.71.215
 BR_NAME = "2L3BR3"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-def native_tcp_traceroute(target_ip, port=443, max_hops=20, timeout=1.5):
+def fetch_globalping_traceroute(ip):
     """
-    使用 Linux 內建核心 Socket 發起合法的 TCP SYN 請求。
-    藉由逐步調高生存時間 (TTL)，在 GitHub Actions 環境內安全穿透並攔截 Hop IP。
+    呼叫 Globalping API，指定使用台灣(Taiwan)的探針發起真實的 Traceroute。
     """
-    log_lines = []
-    log_lines.append(f"traceroute to {target_ip}, {max_hops} hops max, via Native Linux TCP Socket Port {port}")
+    api_url = "https://globalping.io"
     
+    # 1. 建立測試請求 (指定在台灣探針執行 traceroute)
+    payload = {
+        "type": "traceroute",
+        "target": ip,
+        "locations": [{"country": "TW"}], # 強制指定台灣節點
+        "limit": 1
+    }
+    
+    headers = {"Content-Type": "application/json"}
+    
+    try:
+        response = requests.post(api_url, json=payload, headers=headers, timeout=15)
+        if response.status_code != 202:
+            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}"
+        
+        task_id = response.json().get("id")
+        
+        # 2. 輪詢 (Poll) 測試結果，因為外部探針跑 traceroute 需要幾秒鐘
+        result_url = f"https://globalping.io/{task_id}"
+        for _ in range(10): # 最多等待 20 秒
+            time.sleep(2)
+            res = requests.get(result_url, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("status") == "finished":
+                    # 抓取第一個探針的回傳結果
+                    results = data.get("results", [])
+                    if results:
+                        return results[0].get("result", {}).get("rawOutput", "無輸出結果")
+        return "Globalping 測試逾時，未能取得路由資料。"
+    except Exception as e:
+        return f"連線至 Globalping API 失敗: {e}"
+
+def parse_globalping_mtr(raw_out):
+    """
+    解析 Globalping 輸出的標準 Linux traceroute 格式，提取 Last Hop。
+    """
     last_ip = None
     last_hop = 0
+    lines = raw_out.splitlines()
     
-    # 建立一個用於監聽網卡回傳 ICMP 逾時訊息的接收 socket
-    try:
-        icmp_proto = socket.getprotobyname('icmp')
-        recv_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp_proto)
-        recv_sock.setblocking(0)
-    except PermissionError:
-        # 如果 GitHub Actions 的一般權限不允許監聽 RAW ICMP，我們就改用應答式探測
-        recv_sock = None
-        log_lines.append("[通知] 偵測到環境通訊受限，啟用安全應答式 TCP 路由探測...")
-
-    for ttl in range(1, max_hops + 1):
-        # 建立外傳的標準 TCP Socket
-        send_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # 設定 Linux 核心的核心參數：微調 TTL 標頭
-        send_sock.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
-        send_sock.setblocking(0)
-        
-        # 向目標發起套接字連線（這會送出正常的 TCP SYN 封包，防火牆不會阻擋）
-        try:
-            send_sock.connect((target_ip, port))
-        except BlockingIOError:
-            pass # 非阻塞式 Socket 的正常現象
+    # 匹配 " 1  10.0.0.1" 或 "12  210.65.1.1"
+    ip_re = re.compile(r"^\s*(\d+)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)")
+    
+    for line in lines:
+        m = ip_re.match(line)
+        if m:
+            hop = int(m.group(1))
+            ip = m.group(2)
+            last_hop = hop
+            last_ip = ip
             
-        hop_ip = None
-        
-        # 優先嘗試從 ICMP 監聽器抓取中間路由器的回應
-        if recv_sock:
-            ready = select.select([recv_sock], [], [], timeout)
-            if ready[0]:
-                try:
-                    data, addr = recv_sock.recvfrom(512)
-                    hop_ip = addr[0]
-                except Exception:
-                    pass
-
-        # 核心防護機制：如果中間路由器因為安全原因回傳星號，
-        # 當 TTL 到達一定深度時，嘗試與下一個正式網段直接建立快連，逼出最後一跳
-        if not hop_ip:
-            # 檢查當前連線狀態是否已經撞到終點（代表已經安全連上目標）
-            ready_send = select.select([], [send_sock], [], 0.1)
-            if ready_send[1]:
-                # 如果 Socket 變為可寫，代表連線成功或被目標拒絕，但無論如何都抓到了最後節點
-                try:
-                    send_sock.getpeername()
-                    hop_ip = target_ip
-                except Exception:
-                    # 如果失敗，嘗試從核心網路卡快取中讀取已知的最後一個節點 IP
-                    try:
-                        hop_ip = socket.gethostbyname(target_ip)
-                    except:
-                        pass
-        
-        send_sock.close()
-        
-        if hop_ip:
-            log_lines.append(f" {ttl}  {hop_ip}")
-            last_hop = ttl
-            last_ip = hop_ip
-            # 如果已經抓到了目標 IP 或已確定抵達公司 BR，提早結束
-            if hop_ip == target_ip:
-                break
-        else:
-            log_lines.append(f" {ttl}  *")
-            
-    if recv_sock:
-        recv_sock.close()
-        
-    # 如果全星號，進行安全補底：直接將目標當作最終跳數，確保面板能夠對比
-    if last_hop == 0:
-        last_hop = 12 # 給予一個合理的基準估計跳數
-        last_ip = target_ip
-        log_lines.append(f"[安全補底] 已成功連通終點節點 {target_ip}")
-        
-    return last_hop, last_ip, "\n".join(log_lines)
+    return last_hop, last_ip
 
 def load_baseline():
     if BASELINE_FILE.exists():
@@ -183,27 +156,23 @@ def main():
         "111.71.64.8": {"net": "111.71.64.0/24", "comp": "3L1EPG6", "group": "NAT7/8"},
     }
 
-    # 使用無 root 安全平行執行緒池執行
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = {executor.submit(native_tcp_traceroute, ip): ip for ip in IPS}
+    # 由於 Globalping API 處理需要排隊時間，我們依序對 6 組 IP 發起測速
+    for ip in IPS:
+        print(f"正在透過 Globalping 呼叫台灣探針巡檢 IP: {ip} ...")
+        tr_out = fetch_globalping_traceroute(ip)
         
-    for future in futures:
-        ip = futures[future]
-        try:
-            hop, last_ip, tr_out = future.result()
-        except Exception as e:
-            hop, last_ip, tr_out = 0, None, f"偵測執行出錯: {e}"
-            
         log_path = LOG_DIR / f"{ip}.log"
-        log_path.write_text(f"=== {now} Native Linux TCP Traceroute to {ip} ===\n\n{tr_out}\n", encoding='utf-8')
+        log_path.write_text(f"=== {now} Globalping (Taiwan Node) to {ip} ===\n\n{tr_out}\n", encoding='utf-8')
 
+        hop, last_ip = parse_globalping_mtr(tr_out)
         current = {"hop": hop, "ip": last_ip, "raw": tr_out, "ts": now}
         bl = baseline.get(ip)
         
         meta = meta_map[ip]
         if bl is None:
-            baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
-            save_baseline(baseline)
+            if current['hop'] > 0:
+                baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
+                save_baseline(baseline)
             ok_count += 1
             row = build_row_html(ip, meta["net"], meta["comp"], meta["group"], None, current)
         else:
@@ -225,7 +194,7 @@ def main():
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"巡檢完成。正常: {ok_count}, 異常: {bad_count}")
+    print(f"巡檢完成。成功: {ok_count}, 異常: {bad_count}")
 
 if __name__ == "__main__":
     main()
