@@ -14,7 +14,7 @@ BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
 IPS = ["111.71.0.8", "111.71.212.8", "111.71.213.8", "111.71.214.8", "111.71.215.8", "111.71.64.8"]
-# 根據日誌定義：2L3BR3 機房的預期正確最後一跳核心網段 (HiNet 骨幹)
+# 根據中華電信日誌：2L3BR3 機房的預期正確最後一跳核心骨幹網段
 EXPECTED_LAST_HOP_SEGMENT = "210.65.126." 
 BR_NAME = "2L3BR3"
 
@@ -22,7 +22,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute_official(target):
     """
-    呼叫 Globalping API（使用 urllib 搭配專屬白名單標頭）
+    100% 採用同事的黃金源碼機制：使用 urllib 搭配專屬白名單標頭與正確的雙階段輪詢
     """
     api_url = "https://globalping.io"
     payload = json.dumps({
@@ -47,12 +47,14 @@ def fetch_globalping_traceroute_official(target):
     for _ in range(15):
         time.sleep(2)
         try:
+            # 輪詢時不帶 data 參數，確保 urllib 自動發出 GET 請求，避開 405 封鎖
             req_poll = urllib.request.Request(poll_url, headers={"User-Agent": "GitHub-Network-Probe"})
             with urllib.request.urlopen(req_poll, timeout=15) as resp:
                 res_data = json.loads(resp.read().decode("utf-8"))
                 if res_data.get("status") == "finished":
                     results = res_data.get("results", [])
                     if results:
+                        # 成功提取陣列第一筆的 rawOutput 路由純文字
                         return results[0].get("result", {}).get("rawOutput", "")
         except Exception:
             pass
@@ -67,7 +69,7 @@ def parse_globalping_mtr(raw_out):
     last_hop = 0
     lines = raw_out.splitlines()
     
-    # 新正則：匹配開頭數字(跳數)，並抓取後面包含在小括號內的 IP 位址
+    # 匹配開頭跳數，並抓取後面包含在小括號內的實體 IP 位址
     ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)")
     
     for line in lines:
@@ -90,7 +92,7 @@ def save_baseline(data):
     BASELINE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
-    # 核心邏輯：判斷目前抓到的最後有效 IP 是否符合預期的 210.65.126.x 網段
+    # 檢查抓到的 Last Hop 是否屬於中華電信預期的 210.65.126.x 核心網段
     is_valid_route = current['ip'] and current['ip'].startswith(EXPECTED_LAST_HOP_SEGMENT)
 
     if baseline is None:
@@ -101,7 +103,6 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
         diff = current['hop'] - baseline['hop'] if current['hop'] is not None else 0
         diff_sign = f"{'+' if diff>0 else ''}{diff}"
         
-        # 只要能找到符合 210.65.126.x 網段的核心設備回應，即判定為正常抵達 BR 且路由判定為正常
         if is_valid_route:
             reached_br = ("text-emerald-400", "✓", br_name)
             judgement = ("text-emerald-400", "✓", "正常")
@@ -122,7 +123,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
         hop_cell = f"<div class='text-sm font-medium'>{current['hop'] if current['hop'] is not None else '-'}</div><div class='text-xs text-slate-400'>(基:{baseline['hop']} / 差:{diff_sign})</div>"
         
     last_node = current['ip'] if current['ip'] else "<span class='text-rose-300'>無回應</span>"
-    last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>路由資訊</div>"
+    last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>最後一跳</div>"
     
     reached_cls, _, reached_label = reached_br if baseline is not None else ("text-emerald-400","✓", br_name)
     reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><span>{reached_label}</span></div>"
@@ -165,7 +166,7 @@ def main():
     }
 
     for ip in IPS:
-        print(f"正在透過 Globalping 執行台灣探針巡檢 IP: {ip} ...")
+        print(f"正在執行 Globalping 台灣探針巡檢 IP: {ip} ...")
         tr_out = fetch_globalping_traceroute_official(ip)
         
         log_path = LOG_DIR / f"{ip}.log"
@@ -176,8 +177,6 @@ def main():
         bl = baseline.get(ip)
         
         meta = meta_map[ip]
-        
-        # 判斷是否符合預期核心路由
         is_valid_route = current['ip'] and current['ip'].startswith(EXPECTED_LAST_HOP_SEGMENT)
         
         if bl is None:
@@ -206,7 +205,7 @@ def main():
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"巡檢完成。正常(綠燈): {ok_count}, 異常(紅燈): {bad_count}")
+    print(f"巡檢完成。正常: {ok_count}, 異常: {bad_count}")
 
 if __name__ == "__main__":
     main()
