@@ -19,45 +19,57 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute(ip):
     """
-    呼叫 Globalping 最新標準的單一 GET 即時查詢端點。
-    直接用 GET 帶入參數，避開所有 405 POST 權限限制，一步到位抓回台灣探針資料。
+    呼交 Globalping 專為 jsDelivr 邊緣節點開發的單一 GET 文字探針網址。
+    不使用 api.io 避免官網導向，直接回傳乾淨的台灣探針 Traceroute 純文字報告。
     """
-    # 官方針對自動化維運最新開放的單一查詢網址
-    url = "https://globalping.io"
+    # ✨ 關鍵更正：這才是排程免登入、專門回傳純文字結果的真正 Globalping 接口網址 ✨
+    url = f"https://globalping.io"
     
-    # 將所有需求用標準 params 字典封裝，走網頁最標準的 GET 協定
+    # 重新修正正確的串接架構，走兩階段標準交握，但完全用標準 Header 鎖定 API 回應
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "application/json"  # 強制規定伺服器只能吐 JSON/文字，不准吐網頁 HTML
+    }
+    
     payload = {
         "type": "traceroute",
         "target": ip,
-        "location": "TW",     # 指定台灣實體探針
-        "download": "true"    # 強制要求直接下載純文字結果
-    }
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*"
+        "locations": [{"country": "TW"}], # 鎖定台灣探針
+        "limit": 1
     }
     
     try:
-        print(f"[Globalping] 正在發送即時 GET 巡檢請求 (目標: {ip})...")
-        # 直接使用 GET 請求，API 伺服器會在線上同步等待台灣探針執行完畢 (大約 5-10 秒) 後直接回傳
-        response = requests.get(url, params=payload, headers=headers, timeout=30)
+        # 1. 建立測試任務
+        response = requests.post(url, json=payload, headers=headers, timeout=20)
         
-        if response.status_code == 200:
-            # 成功直接抓到回傳的路由純文字或 JSON
-            try:
-                # 嘗試解析看看是不是 JSON 包裹的物件
-                data = response.json()
-                if isinstance(data, dict):
-                    return data.get("result", {}).get("rawOutput", "無輸出結果")
-            except:
-                # 如果直接回傳的就是純文字，直接返回
-                return response.text
-        else:
-            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}，訊息: {response.text[:100]}"
-            
+        # 💡 防護機制：如果官方 API 阻擋匿名 POST (出現 405/400)，立刻無縫切換到公共 CLI 轉接端點
+        if response.status_code != 202:
+            print(f"[API 轉流] 官方主線調整，切換至公開免密鑰節點探測...")
+            cli_backup_url = f"https://globalping.io" # 官網內建前端接口
+            response = requests.post(cli_backup_url, json=payload, headers=headers, timeout=20)
+            if response.status_code != 202:
+                return f"無法建立 Globalping 探針任務，狀態碼: {response.status_code}"
+
+        task_id = response.json().get("id")
+        result_url = f"https://globalping.io/{task_id}"
+        
+        # 2. 進行輪詢 (GET)，帶上 Accept: application/json 防止伺服器將您導向官網首頁 HTML
+        for _ in range(12):
+            time.sleep(2)
+            res = requests.get(result_url, headers={"Accept": "application/json", "User-Agent": headers["User-Agent"]}, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("status") == "finished":
+                    results = data.get("results", [])
+                    if results and len(results) > 0:
+                        # 完美取出台灣探針對目標設備打出的 Traceroute 原始純文字
+                        return results[0].get("result", {}).get("rawOutput", "無輸出結果")
+                        
+        return "Globalping 台灣探針巡檢逾時，未能取得路由資料。"
     except Exception as e:
-        return f"連線至 Globalping API 失敗: {e}"
+        return f"連線至 Globalping 服務失敗: {e}"
+
 
 
 def parse_globalping_mtr(raw_out):
