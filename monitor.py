@@ -4,7 +4,7 @@ import urllib.request
 import sys
 import datetime
 import time
-import re 
+import re
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -14,14 +14,17 @@ BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
 IPS = ["111.71.0.8", "111.71.212.8", "111.71.213.8", "111.71.214.8", "111.71.215.8", "111.71.64.8"]
+# 根據日誌定義：2L3BR3 機房的預期正確最後一跳核心網段 (HiNet 骨幹)
+EXPECTED_LAST_HOP_SEGMENT = "210.65.126." 
 BR_NAME = "2L3BR3"
+
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute_official(target):
     """
-    整合同事的黃金源碼：使用 urllib 搭配專屬白名單 User-Agent
+    呼叫 Globalping API（使用 urllib 搭配專屬白名單標頭）
     """
-    api_url = "https://api.globalping.io/v1/measurements"
+    api_url = "https://globalping.io"
     payload = json.dumps({
         "type": "traceroute",
         "target": target,
@@ -50,24 +53,31 @@ def fetch_globalping_traceroute_official(target):
                 if res_data.get("status") == "finished":
                     results = res_data.get("results", [])
                     if results:
-                        # 核心修復：正確提取陣列第一筆的 rawOutput 文字
                         return results[0].get("result", {}).get("rawOutput", "")
         except Exception:
             pass
     return "探測逾時"
 
 def parse_globalping_mtr(raw_out):
+    """
+    精準解析真實日誌格式：
+    範例：" 5  210-65-126-101.hinet-ip.hinet.net (210.65.126.101)  5.374 ms"
+    """
     last_ip = None
     last_hop = 0
     lines = raw_out.splitlines()
-    ip_re = re.compile(r"^\s*(\d+)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)")
+    
+    # 新正則：匹配開頭數字(跳數)，並抓取後面包含在小括號內的 IP 位址
+    ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)")
+    
     for line in lines:
-        m = ip_re.match(line)
+        m = ip_in_parentheses_re.match(line)
         if m:
             hop = int(m.group(1))
             ip = m.group(2)
             last_hop = hop
             last_ip = ip
+            
     return last_hop, last_ip
 
 def load_baseline():
@@ -80,6 +90,9 @@ def save_baseline(data):
     BASELINE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
+    # 核心邏輯：判斷目前抓到的最後有效 IP 是否符合預期的 210.65.126.x 網段
+    is_valid_route = current['ip'] and current['ip'].startswith(EXPECTED_LAST_HOP_SEGMENT)
+
     if baseline is None:
         judgement = ("text-emerald-400", "✓", "基準建立")
         reached_br = ("text-emerald-400", "✓", br_name)
@@ -87,14 +100,16 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
     else:
         diff = current['hop'] - baseline['hop'] if current['hop'] is not None else 0
         diff_sign = f"{'+' if diff>0 else ''}{diff}"
-        if current['ip'] and baseline.get('ip') and (current['ip'] == baseline.get('ip')):
+        
+        # 只要能找到符合 210.65.126.x 網段的核心設備回應，即判定為正常抵達 BR 且路由判定為正常
+        if is_valid_route:
             reached_br = ("text-emerald-400", "✓", br_name)
             judgement = ("text-emerald-400", "✓", "正常")
             status_text = f"正常抵達 {br_name} ({diff_sign})"
         else:
             reached_br = ("text-rose-400", "✕", "未抵達 BR")
             judgement = ("text-rose-400", "✕", "異常")
-            status_text = f"最後回應 {current['ip']}" if current['ip'] else "無回應 / 路由中斷"
+            status_text = f"最後回應: {current['ip'] if current['ip'] else '無回應'}"
 
     ip_cell = f"<div class='text-sm ip-mono text-cyan-300 font-semibold'>{ip}</div><div class='text-xs text-slate-400'>{net}</div>"
     component_cell = f"<div class='text-sm'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
@@ -150,7 +165,7 @@ def main():
     }
 
     for ip in IPS:
-        print(f"正在執行 Globalping 台灣探針巡檢 IP: {ip} ...")
+        print(f"正在透過 Globalping 執行台灣探針巡檢 IP: {ip} ...")
         tr_out = fetch_globalping_traceroute_official(ip)
         
         log_path = LOG_DIR / f"{ip}.log"
@@ -161,6 +176,10 @@ def main():
         bl = baseline.get(ip)
         
         meta = meta_map[ip]
+        
+        # 判斷是否符合預期核心路由
+        is_valid_route = current['ip'] and current['ip'].startswith(EXPECTED_LAST_HOP_SEGMENT)
+        
         if bl is None:
             if current['hop'] > 0:
                 baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
@@ -168,11 +187,12 @@ def main():
             ok_count += 1
             row = build_row_html(ip, meta["net"], meta["comp"], meta["group"], None, current)
         else:
-            if current['ip'] and bl.get('ip') and current['ip'] == bl.get('ip'):
+            if is_valid_route:
                 ok_count += 1
             else:
                 bad_count += 1
             row = build_row_html(ip, meta["net"], meta["comp"], meta["group"], bl, current)
+            
         rows.append(row)
         results[ip] = {"baseline": baseline.get(ip), "current": current}
 
@@ -186,7 +206,7 @@ def main():
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"巡檢完成。成功: {ok_count}, 異常: {bad_count}")
+    print(f"巡檢完成。正常(綠燈): {ok_count}, 異常(紅燈): {bad_count}")
 
 if __name__ == "__main__":
     main()
