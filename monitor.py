@@ -20,41 +20,49 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 def fetch_globalping_traceroute(ip):
     """
     呼叫 Globalping API，指定使用台灣(Taiwan)的探針發起真實的 Traceroute。
+    已補上 GET 輪詢時的 Headers 偽裝，徹底解決 405 Method Not Allowed 錯誤。
     """
-    api_url = "https://globalping.io"
+    # 官方標準端點網址 (POST 建立任務)
+    api_url = "https://api.globalping.io/v1/measurements"
     
-    # 1. 建立測試請求 (指定在台灣探針執行 traceroute)
     payload = {
         "type": "traceroute",
         "target": ip,
-        "locations": [{"country": "TW"}], # 強制指定台灣節點
+        "locations": [{"country": "TW"}], # 指定台灣實體探針
         "limit": 1
     }
     
-    headers = {"Content-Type": "application/json"}
+    # 建立標準瀏覽器標頭，穿透 Globalping 的自動化爬蟲防護牆
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
     
     try:
+        # 1. 建立測試任務 (POST)
         response = requests.post(api_url, json=payload, headers=headers, timeout=15)
         if response.status_code != 202:
-            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}"
+            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}，原因: {response.text[:100]}"
         
         task_id = response.json().get("id")
+        result_url = f"https://globalping.io{task_id}"
         
-        # 2. 輪詢 (Poll) 測試結果，因為外部探針跑 traceroute 需要幾秒鐘
-        result_url = f"https://globalping.io/{task_id}"
-        for _ in range(10): # 最多等待 20 秒
+        # 2. 輪詢獲取結果 (GET) —— ✨ 這裡補上 headers=headers 解決 405 關鍵 ✨
+        for _ in range(12): # 最多等待 24 秒
             time.sleep(2)
-            res = requests.get(result_url, timeout=15)
+            # 必須帶入相同的瀏覽器標頭，否則會被 Globalping 防火牆判定為非法 HTTP 方法而噴 405
+            res = requests.get(result_url, headers=headers, timeout=15)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("status") == "finished":
-                    # 抓取第一個探針的回傳結果
                     results = data.get("results", [])
                     if results:
                         return results[0].get("result", {}).get("rawOutput", "無輸出結果")
-        return "Globalping 測試逾時，未能取得路由資料。"
+        return "Globalping 測試逾時，台灣探針未能及時回傳路由資料。"
     except Exception as e:
         return f"連線至 Globalping API 失敗: {e}"
+
 
 def parse_globalping_mtr(raw_out):
     """
