@@ -14,7 +14,7 @@ BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
 IPS = ["111.71.0.8", "111.71.212.8", "111.71.213.8", "111.71.214.8", "111.71.215.8", "111.71.64.8"]
-# 根據中華電信日誌：2L3BR3 機房的預期正確最後一跳核心骨幹網段
+# 根據您貼出的真實中華電信日誌：預期正確最後一跳核心骨幹網段
 EXPECTED_LAST_HOP_SEGMENT = "210.65.126." 
 BR_NAME = "2L3BR3"
 
@@ -22,9 +22,11 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute_official(target):
     """
-    100% 採用同事的黃金源碼機制：使用 urllib 搭配專屬白名單標頭與正確的雙階段輪詢
+    100% 採用同事給的原始黃金網址與 urllib 輪詢機制
     """
-    api_url = "https://globalping.io"
+    # ✨ 完美還原：採用您抄自同事的正確 API 網址 ✨
+    api_url = "https://api.globalping.io/v1/measurements"
+    
     payload = json.dumps({
         "type": "traceroute",
         "target": target,
@@ -47,7 +49,6 @@ def fetch_globalping_traceroute_official(target):
     for _ in range(15):
         time.sleep(2)
         try:
-            # 輪詢時不帶 data 參數，確保 urllib 自動發出 GET 請求，避開 405 封鎖
             req_poll = urllib.request.Request(poll_url, headers={"User-Agent": "GitHub-Network-Probe"})
             with urllib.request.urlopen(req_poll, timeout=15) as resp:
                 res_data = json.loads(resp.read().decode("utf-8"))
@@ -69,7 +70,7 @@ def parse_globalping_mtr(raw_out):
     last_hop = 0
     lines = raw_out.splitlines()
     
-    # 匹配開頭跳數，並抓取後面包含在小括號內的實體 IP 位址
+    # 修正正則表達式：匹配開頭跳數數字，並抓取後面包含在小括號內的實體 IP 位址
     ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)")
     
     for line in lines:
@@ -205,7 +206,7 @@ def main():
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"巡檢完成。正常: {ok_count}, 異常: {bad_count}")
+    print(f"巡檢完成。正常(綠燈): {ok_count}, 異常(紅燈): {bad_count}")
 
 if __name__ == "__main__":
     main()
