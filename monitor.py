@@ -20,19 +20,16 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 def fetch_globalping_traceroute(ip):
     """
     呼叫 Globalping API，指定使用台灣(Taiwan)的探針發起真實的 Traceroute。
-    已補上 GET 輪詢時的 Headers 偽裝，徹底解決 405 Method Not Allowed 錯誤。
     """
-    # 官方標準端點網址 (POST 建立任務)
-    api_url = "https://api.globalping.io/v1/measurements"
+    api_url = "https://globalping.io"
     
     payload = {
         "type": "traceroute",
         "target": ip,
-        "locations": [{"country": "TW"}], # 指定台灣實體探針
+        "locations": [{"country": "TW"}],
         "limit": 1
     }
     
-    # 建立標準瀏覽器標頭，穿透 Globalping 的自動化爬蟲防護牆
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/json",
@@ -43,26 +40,24 @@ def fetch_globalping_traceroute(ip):
         # 1. 建立測試任務 (POST)
         response = requests.post(api_url, json=payload, headers=headers, timeout=15)
         if response.status_code != 202:
-            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}，原因: {response.text[:100]}"
+            return f"Globalping 建立任務失敗，狀態碼: {response.status_code}"
         
         task_id = response.json().get("id")
-        result_url = f"https://globalping.io{task_id}"
+        result_url = f"https://globalping.io/{task_id}"
         
-        # 2. 輪詢獲取結果 (GET) —— ✨ 這裡補上 headers=headers 解決 405 關鍵 ✨
-        for _ in range(12): # 最多等待 24 秒
+        # 2. 輪詢獲取結果 (GET)
+        for _ in range(12):
             time.sleep(2)
-            # 必須帶入相同的瀏覽器標頭，否則會被 Globalping 防火牆判定為非法 HTTP 方法而噴 405
             res = requests.get(result_url, headers=headers, timeout=15)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("status") == "finished":
                     results = data.get("results", [])
-                    if results:
+                    if results and len(results) > 0:
                         return results[0].get("result", {}).get("rawOutput", "無輸出結果")
         return "Globalping 測試逾時，台灣探針未能及時回傳路由資料。"
     except Exception as e:
         return f"連線至 Globalping API 失敗: {e}"
-
 
 def parse_globalping_mtr(raw_out):
     """
@@ -72,7 +67,7 @@ def parse_globalping_mtr(raw_out):
     last_hop = 0
     lines = raw_out.splitlines()
     
-    # 匹配 " 1  10.0.0.1" 或 "12  210.65.1.1"
+    # 匹配開頭為數字，後面跟著 IP 的標準 traceroute 格式
     ip_re = re.compile(r"^\s*(\d+)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)")
     
     for line in lines:
@@ -164,7 +159,7 @@ def main():
         "111.71.64.8": {"net": "111.71.64.0/24", "comp": "3L1EPG6", "group": "NAT7/8"},
     }
 
-    # 由於 Globalping API 處理需要排隊時間，我們依序對 6 組 IP 發起測速
+    # 依序調用 Globalping API，防範高頻衝突並完整分離變數作用域
     for ip in IPS:
         print(f"正在透過 Globalping 呼叫台灣探針巡檢 IP: {ip} ...")
         tr_out = fetch_globalping_traceroute(ip)
