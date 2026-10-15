@@ -2,8 +2,9 @@ name: IP Traceroute Monitor Panel
 
 on:
   schedule:
+    # 國際標準時間 (UTC) 每 30 分鐘執行一次
     - cron: '*/30 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # 允許您在 GitHub 網頁上手動點擊立即執行
 
 permissions:
   contents: write
@@ -24,6 +25,7 @@ jobs:
         python-version: '3.10'
 
     - name: 安裝 Python 依賴套件
+      # Globalping 只需要標準的 requests 套件，不需要安裝系統 traceroute 或 scapy
       run: |
         pip install requests
 
@@ -40,8 +42,9 @@ jobs:
         restore-keys: |
           mtr-panel-data-
 
-    - name: 執行 100% 穿透型 TCP 路由監控
-      run: sudo python monitor.py
+    - name: 執行 Globalping 路由監控
+      # 拿掉先前嘗試的 sudo，回歸正常使用者執行
+      run: python monitor.py
 
     - name: 儲存最新數據快取
       if: always()
