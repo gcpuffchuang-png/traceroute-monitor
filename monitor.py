@@ -158,12 +158,10 @@ def main():
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     meta_map = {
-        "111.71.0.8": {"net": "111.71.0.0/17 (前半)", "comp": "2L3EPG4", "group": "NAT7/8"},
-        "111.71.212.8": {"net": "111.71.212.0/23 (前半)", "comp": "2L3EPG1", "group": "NAT7/8"},
-        "111.71.213.8": {"net": "111.71.212.0/23 (後半)", "comp": "2L3EPG1", "group": "NAT7/8"},
-        "111.71.214.8": {"net": "111.71.214.0/23 (前半)", "comp": "4L1EPG1", "group": "NAT7/8"},
-        "111.71.215.8": {"net": "111.71.214.0/23 (後半)", "comp": "4L1EPG1", "group": "NAT7/8"},
-        "111.71.64.8": {"net": "111.71.64.0/24", "comp": "2L3EPG4", "group": "NAT7/8"},
+        "2001:B400:E200::1": {"net": "IPv6", "comp": "2L3EPG1", "group": "NAT7/8"},
+        "2001:B400:E250::1": {"net": "IPv6", "comp": "2L3EPG2", "group": "NAT7/8"},
+        "2001:B400:E2A0::1": {"net": "IPv6", "comp": "2L3EPG3", "group": "NAT7/8"},
+        "2001:B400:E260::1": {"net": "IPv6", "comp": "2L3EPG4", "group": "NAT7/8"},
     }
 
     for ip in IPS:
