@@ -60,22 +60,30 @@ def fetch_globalping_traceroute_official(target):
 
 def parse_globalping_mtr(raw_out):
     """
-    精準解析真實日誌中的 IPv6 格式
+    智能路由解析器：
+    自動過濾掉帶有 !N (Network Unreachable) 的錯誤終點行，
+    由下往上逆向尋找第一個真正有效回應的核心骨幹路由器 IP。
     """
-    last_ip = None
-    last_hop = 0
     lines = raw_out.splitlines()
+    
+    # 匹配跳數與括號內 IP 的標準正則
     ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9a-fA-F:\.]+)\)")
     
-    for line in lines:
+    # 為了實現由下往上找，我們將日誌行數進行反轉（倒序）
+    for line in reversed(lines):
+        # ✨ 核心安全鎖：如果這一行包含 !N 或是其他不可達標記，直接丟棄不解析 ✨
+        if "!N" in line or "!H" in line or "!P" in line:
+            print(f"[異常封包過濾] 已自動剔除帶有不可達標記的行數: {line.strip()}")
+            continue
+            
         m = ip_in_parentheses_re.match(line)
         if m:
             hop = int(m.group(1))
             ip = m.group(2)
-            last_hop = hop
-            last_ip = ip
+            # 找到最底層、第一個沒有錯誤標記的實體節點，立刻回傳（這就是真正的 Last Hop）
+            return hop, ip
             
-    return last_hop, last_ip
+    return 0, None
 
 def load_baseline():
     if BASELINE_FILE.exists():
