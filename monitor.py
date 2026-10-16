@@ -102,7 +102,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
     優化版網頁列生成器：將【路由合法性】與【歷史基準比對】完全拆開判定
     """
     # 1. 核心網段獨立判定：只要沒拿到預期的骨幹網段，不論是不是第一趟，一律打叉亮紅燈
-    is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current['ip'], re.IGNORECASE))
+    is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current_ip, re.IGNORECASE))
     
     if is_valid_route:
         reached_br = ("text-emerald-400", "✓", br_name)
