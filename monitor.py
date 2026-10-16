@@ -14,17 +14,17 @@ BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
 IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1"]
-# 根據您貼出的真實中華電信日誌：預期正確最後一跳核心骨幹網段
-EXPECTED_LAST_HOP_SEGMENT = "2001:b400:156:" 
+# 中華電信行動網路 IPv6 核心骨幹預期正確網段 (統一轉小寫以便精準比對)
+EXPECTED_LAST_HOP_SEGMENT = "2001:b400:156:".lower() 
 BR_NAME = "CHTM BR"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute_official(target):
     """
-    100% 採用同事給的原始黃金網址與 urllib 輪詢機制
+    100% 採用您同事給的原始黃金網址與 urllib 輪詢機制
     """
-    # ✨ 完美還原：採用您抄自同事的正確 API 網址 ✨
+    # ✨ 聽從指引：一字不差還原帶有 v1 的正確官方 API 網址 ✨
     api_url = "https://api.globalping.io/v1/measurements"
     
     payload = json.dumps({
@@ -63,15 +63,15 @@ def fetch_globalping_traceroute_official(target):
 
 def parse_globalping_mtr(raw_out):
     """
-    精準解析真實日誌格式：
-    範例：" 5  210-65-126-101.hinet-ip.hinet.net (210.65.126.101)  5.374 ms"
+    全新 IPv6/IPv4 雙重規格解析器：
+    完美相容括號內的 IPv6 格式（例如包含 2001:b400:156::x 的冒號與英文字母）
     """
     last_ip = None
     last_hop = 0
     lines = raw_out.splitlines()
     
-    # 修正正則表達式：匹配開頭跳數數字，並抓取後面包含在小括號內的實體 IP 位址
-    ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)")
+    # 新正則：[0-9a-fA-F:\.]+ 可以同時吃下 IPv4 的點號與 IPv6 的冒號、十六進位英文字母
+    ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9a-fA-F:\.]+)\)")
     
     for line in lines:
         m = ip_in_parentheses_re.match(line)
@@ -93,8 +93,8 @@ def save_baseline(data):
     BASELINE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
-    # 檢查抓到的 Last Hop 是否屬於中華電信預期的 210.65.126.x 核心網段
-    is_valid_route = current['ip'] and current['ip'].startswith(EXPECTED_LAST_HOP_SEGMENT)
+    # 檢查抓到的 IPv6 Last Hop 是否屬於中華電信預期的核心網段 (統一轉小寫比對)
+    is_valid_route = current['ip'] and current['ip'].lower().startswith(EXPECTED_LAST_HOP_SEGMENT)
 
     if baseline is None:
         judgement = ("text-emerald-400", "✓", "基準建立")
@@ -158,10 +158,10 @@ def main():
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     meta_map = {
-        "2001:B400:E200::1": {"net": "IPv6", "comp": "2L3EPG1", "group": "NAT7/8"},
-        "2001:B400:E250::1": {"net": "IPv6", "comp": "2L3EPG2", "group": "NAT7/8"},
-        "2001:B400:E2A0::1": {"net": "IPv6", "comp": "2L3EPG3", "group": "NAT7/8"},
-        "2001:B400:E260::1": {"net": "IPv6", "comp": "2L3EPG4", "group": "NAT7/8"},
+        "2001:B400:E200::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG1", "group": "NAT7/8"},
+        "2001:B400:E250::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG2", "group": "NAT7/8"},
+        "2001:B400:E2A0::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG3", "group": "NAT7/8"},
+        "2001:B400:E260::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG4", "group": "NAT7/8"},
     }
 
     for ip in IPS:
@@ -176,7 +176,7 @@ def main():
         bl = baseline.get(ip)
         
         meta = meta_map[ip]
-        is_valid_route = current['ip'] and current['ip'].startswith(EXPECTED_LAST_HOP_SEGMENT)
+        is_valid_route = current['ip'] and current['ip'].lower().startswith(EXPECTED_LAST_HOP_SEGMENT)
         
         if bl is None:
             if current['hop'] > 0:
@@ -198,13 +198,16 @@ def main():
         sys.exit(1)
         
     tpl = TEMPLATE.read_text(encoding='utf-8')
-    out_html = tpl.replace("<!-- TABLE_ROWS -->", "\n".join(rows))
+    rows_html = "\n".join(rows)
+    out_html = tpl.replace("<!-- TABLE_ROWS -->", rows_html)
+    
+    # 動態注入前端頂部卡片統計數據所需的 window 變數
     meta_js = f"<script>window.__MONITOR_META__ = {{ last_updated: '{now}', total: {len(IPS)}, ok: {ok_count}, bad: {bad_count} }};</script>\n"
     out_html = out_html.replace("<body", f"{meta_js}<body", 1)
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"巡檢完成。正常(綠燈): {ok_count}, 異常(紅燈): {bad_count}")
+    print(f"IPv6 巡檢完成。正常: {ok_count}, 異常: {bad_count}")
 
 if __name__ == "__main__":
     main()
