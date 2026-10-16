@@ -18,7 +18,7 @@ IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400
       
       ]
 # 中華電信行動網路 IPv6 核心骨幹預期正確網段
-EXPECTED_LAST_HOP_SEGMENT = "2001:b400:156:".lower() 
+EXPECTED_LAST_HOP_PATTERN = r"^2001:b400:15[678]:"
 BR_NAME = "CHTM BR"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -102,7 +102,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
     優化版網頁列生成器：將【路由合法性】與【歷史基準比對】完全拆開判定
     """
     # 1. 核心網段獨立判定：只要沒拿到預期的骨幹網段，不論是不是第一趟，一律打叉亮紅燈
-    is_valid_route = current['ip'] and current['ip'].lower().startswith(EXPECTED_LAST_HOP_SEGMENT)
+    is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current['ip'], re.IGNORECASE))
     
     if is_valid_route:
         reached_br = ("text-emerald-400", "✓", br_name)
