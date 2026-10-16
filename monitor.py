@@ -15,7 +15,7 @@ LOG_DIR = BASE_DIR / "logs"
 
 IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1"]
 # 根據您貼出的真實中華電信日誌：預期正確最後一跳核心骨幹網段
-EXPECTED_LAST_HOP_SEGMENT = "210.65.126." 
+EXPECTED_LAST_HOP_SEGMENT = "2001:b400:156:" 
 BR_NAME = "CHTM BR"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
