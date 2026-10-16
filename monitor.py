@@ -13,7 +13,10 @@ OUTPUT = BASE_DIR / "index.html"
 BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
-IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1"]
+IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1", 
+       "2001:B400:E300::1", "2001:B400:E350::1", "2001:B400:E3A0::1", "2001:B400:E3E0::1",
+      
+      ]
 # 中華電信行動網路 IPv6 核心骨幹預期正確網段
 EXPECTED_LAST_HOP_SEGMENT = "2001:b400:156:".lower() 
 BR_NAME = "CHTM BR"
@@ -166,6 +169,10 @@ def main():
         "2001:B400:E250::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG2", "group": "NAT7/8"},
         "2001:B400:E2A0::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG3", "group": "NAT7/8"},
         "2001:B400:E260::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG4", "group": "NAT7/8"},
+        "2001:B400:E300::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG1", "group": "NAT7/8"},
+        "2001:B400:E350::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG2", "group": "NAT7/8"},
+        "2001:B400:E3A0::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG3", "group": "NAT7/8"},
+        "2001:B400:E3E0::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG4U", "group": "NAT7/8"},
     }
 
     for ip in IPS:
