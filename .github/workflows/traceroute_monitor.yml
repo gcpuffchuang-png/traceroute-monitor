@@ -1,33 +1,30 @@
 name: IP Traceroute Monitor Panel
-
 on:
   schedule:
+    # 國際標準時間 (UTC) 每 30 分鐘執行一次
     - cron: '*/30 * * * *'
-  workflow_dispatch:
-
+  workflow_dispatch: # 允許您在 GitHub 網頁上手動點擊立即執行
 permissions:
   contents: write
   pages: write
   id-token: write
-
 jobs:
   monitor:
     runs-on: ubuntu-latest
-
     steps:
     - name: 檢出程式碼
-      uses: actions/checkout@v4.2.2 # 升級至最新穩定版
-
+      uses: actions/checkout@v4
     - name: 設定 Python 環境
-      uses: actions/setup-python@v5.3.0 # 升級支援 Node.js 20+
-
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
     - name: 安裝 Python 依賴套件
+      # Globalping 只需要標準的 requests 套件，不需要安裝系統 traceroute 或 scapy
       run: |
         pip install requests
-
     - name: 恢復歷史數據快取 (Baseline, Logs, HTML)
       id: cache-data
-      uses: actions/cache@v4.2.0 # 升級快取機制加速載入
+      uses: actions/cache@v4
       with:
         path: |
           baseline.json
@@ -37,13 +34,12 @@ jobs:
         key: mtr-panel-data-${{ github.run_id }}
         restore-keys: |
           mtr-panel-data-
-
     - name: 執行 Globalping 路由監控
+      # 拿掉先前嘗試的 sudo，回歸正常使用者執行
       run: python monitor.py
-
     - name: 儲存最新數據快取
       if: always()
-      uses: actions/cache/save@v4.2.0
+      uses: actions/cache/save@v4
       with:
         path: |
           baseline.json
@@ -51,11 +47,9 @@ jobs:
           results.json
           logs/
         key: mtr-panel-data-${{ github.run_id }}
-
     - name: 上傳網頁構件
-      uses: actions/upload-pages-artifact@v3.0.1
+      uses: actions/upload-pages-artifact@v3
       with:
         path: '.'
-
     - name: 部署至 GitHub Pages
-      uses: actions/deploy-pages@v4.0.5
+      uses: actions/deploy-pages@v4
