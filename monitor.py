@@ -101,26 +101,22 @@ def save_baseline(data):
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
     """
-    優化版網頁列生成器：將【路由合法性】與【歷史基準比對】完全拆開判定
+    修改重點：全面調亮文字顏色（text-slate-200 / text-white），確保深色背景下字體清晰
     """
-    # 1. 核心網段獨立判定：只要沒拿到預期的骨幹網段，不論是不是第一趟，一律打叉亮紅燈
-    is_valid_route = current['ip'] and (bool(re.match(EXPECTED_LAST_HOP_PATTERN,  current['ip'], re.IGNORECASE)) or bool(re.match(EXPECTED_LAST_HOP_PATTERN2,  current['ip'], re.IGNORECASE)))
+    is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current['ip'], re.IGNORECASE))
     
     if is_valid_route:
         reached_br = ("text-emerald-400", "✓", br_name)
     else:
         reached_br = ("text-rose-400", "✕", "未抵達 BR")
-
-    # 2. 歷史基準跳數比對與差值計算
     if baseline is None:
-        hop_cell = f"<div class='text-sm font-medium'>{current['hop'] if current['hop'] else '-'}</div><div class='text-xs text-slate-400'>(新基準建立)</div>"
+        hop_cell = f"<div class='text-sm font-medium text-white'>{current['hop'] if current['hop'] else '-'}</div><div class='text-xs text-slate-400'>(新基準建立)</div>"
         status_text = "新項目基準已建立" if is_valid_route else "路由中斷/異常"
         judgement = ("text-emerald-400", "✓", "正常") if is_valid_route else ("text-rose-400", "✕", "錯誤")
     else:
-        # 當快取存在，精準計算當前跳數與初始基準的差值
         diff = current['hop'] - baseline['hop'] if current['hop'] is not None and baseline.get('hop') is not None else 0
         diff_sign = f"+{diff}" if diff > 0 else f"{diff}"
-        hop_cell = f"<div class='text-sm font-medium'>{current['hop'] if current['hop'] is not None else '-'}</div><div class='text-xs text-slate-400'>(基:{baseline['hop']} / 差:{diff_sign})</div>"
+        hop_cell = f"<div class='text-sm font-medium text-white'>{current['hop'] if current['hop'] is not None else '-'}</div><div class='text-xs text-slate-400'>(基:{baseline['hop']} / 差:{diff_sign})</div>"
         
         if is_valid_route:
             judgement = ("text-emerald-400", "✓", "正常")
@@ -128,33 +124,31 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
         else:
             judgement = ("text-rose-400", "✕", "錯誤")
             status_text = f"最後回應: {current['ip'] if current['ip'] else '無回應'}"
-
-    # 封裝表格組件
+    # 調高文字對比度 (text-cyan-300 / text-slate-200 / text-sky-400)，消滅看不清的問題
     ip_cell = f"<div class='text-sm ip-mono text-cyan-300 font-semibold'>{ip}</div><div class='text-xs text-slate-400'>{net}</div>"
-    component_cell = f"<div class='text-sm'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
-    last_node = current['ip'] if current['ip'] else "<span class='text-rose-300'>無回應</span>"
+    component_cell = f"<div class='text-sm text-slate-200 font-medium'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
+    
+    last_node = current['ip'] if current['ip'] else "<span class='text-rose-400 font-medium'>* * *</span>"
     last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>最後一跳</div>"
     
     reached_cls, _, reached_label = reached_br
     reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><span>{reached_label}</span></div>"
     
-    status_cell = f"<div class='text-sm'>{status_text}</div>"
+    status_cell = f"<div class='text-sm text-slate-200'>{status_text}</div>"
     judgement_cls, _, judgement_label = judgement
     judgement_cell = f"<div class='inline-flex items-center gap-2 {judgement_cls} font-semibold'><span>{judgement_label}</span></div>"
-
     log_file = f"logs/{ip}.log"
-    view_btn = f"<a class='px-3 py-1 text-sm text-sky-500 bg-sky-900/30 rounded-md hover:bg-sky-800/40 transition' href='{log_file}' target='_blank'>查看</a>"
-
+    view_btn = f"<a class='px-3 py-1 text-xs text-cyan-400 bg-cyan-950/40 border border-cyan-800/40 rounded-md hover:bg-cyan-900/60 transition' href='{log_file}' target='_blank'>查看</a>"
     return f"""
-    <tr class="hover:bg-slate-800/50 transition-transform transform hover:-translate-y-0.5">
-      <td class="px-4 py-4">{ip_cell}</td>
-      <td class="px-4 py-4">{component_cell}</td>
-      <td class="px-4 py-4 text-center">{hop_cell}</td>
-      <td class="px-4 py-4">{last_node_cell}</td>
-      <td class="px-4 py-4">{reached_cell}</td>
-      <td class="px-4 py-4">{status_cell}</td>
+    <tr class="hover:bg-slate-800/30 transition border-b border-slate-800/50 text-slate-300">
+      <td class="px-6 py-4">{ip_cell}</td>
+      <td class="px-6 py-4">{component_cell}</td>
+      <td class="px-6 py-4 text-center">{hop_cell}</td>
+      <td class="px-6 py-4">{last_node_cell}</td>
+      <td class="px-6 py-4">{reached_cell}</td>
+      <td class="px-6 py-4">{status_cell}</td>
       <td class="px-4 py-4 text-center">{judgement_cell}</td>
-      <td class="px-4 py-4 text-center">{view_btn}</td>
+      <td class="px-6 py-4 text-center">{view_btn}</td>
     </tr>
     """
 
