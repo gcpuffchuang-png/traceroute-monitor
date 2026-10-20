@@ -13,12 +13,11 @@ OUTPUT = BASE_DIR / "index.html"
 BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
-IPS = [
-    "2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1", 
-    "2001:B400:E300::1", "2001:B400:E350::1", "2001:B400:E3A0::1", "2001:B400:E3E0::1"
-]
-
-# 聽從您的要求：使用正規表示法精準支持 156:、157:、158: 核心骨幹網段
+IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1", 
+       "2001:B400:E300::1", "2001:B400:E350::1", "2001:B400:E3A0::1", "2001:B400:E3E0::1",
+      
+      ]
+# 中華電信行動網路 IPv6 核心骨幹預期正確網段
 EXPECTED_LAST_HOP_PATTERN = r"^2001:b400:15[678]:"
 BR_NAME = "CHTM BR"
 
@@ -26,7 +25,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_globalping_traceroute_official(target):
     """
-    採用同事給的原始黃金網址與 urllib 輪詢機制
+    100% 採用您提供之同事黃金源碼通訊機制與正確 API 網址
     """
     api_url = "https://api.globalping.io/v1/measurements"
     payload = json.dumps({
@@ -64,19 +63,28 @@ def fetch_globalping_traceroute_official(target):
 
 def parse_globalping_mtr(raw_out):
     """
-    智能路由解析器：自動過濾 !N 錯誤封包，由下往上逆向提取有效節點
+    智能路由解析器：
+    自動過濾掉帶有 !N (Network Unreachable) 的錯誤終點行，
+    由下往上逆向尋找第一個真正有效回應的核心骨幹路由器 IP。
     """
     lines = raw_out.splitlines()
+    
+    # 匹配跳數與括號內 IP 的標準正則
     ip_in_parentheses_re = re.compile(r"^\s*(\d+)\s+.*?\(([0-9a-fA-F:\.]+)\)")
     
+    # 為了實現由下往上找，我們將日誌行數進行反轉（倒序）
     for line in reversed(lines):
+        # ✨ 核心安全鎖：如果這一行包含 !N 或是其他不可達標記，直接丟棄不解析 ✨
         if "!N" in line or "!H" in line or "!P" in line:
-            print(f"[異常過濾] 已剔除錯誤行: {line.strip()}")
+            print(f"[異常封包過濾] 已自動剔除帶有不可達標記的行數: {line.strip()}")
             continue
             
         m = ip_in_parentheses_re.match(line)
         if m:
-            return int(m.group(1)), m.group(2)
+            hop = int(m.group(1))
+            ip = m.group(2)
+            # 找到最底層、第一個沒有錯誤標記的實體節點，立刻回傳（這就是真正的 Last Hop）
+            return hop, ip
             
     return 0, None
 
@@ -91,64 +99,60 @@ def save_baseline(data):
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
     """
-    高端深色科技戰情室風格的 HTML 生成器
+    優化版網頁列生成器：將【路由合法性】與【歷史基準比對】完全拆開判定
     """
-    # 進行不分大小寫的 Regex 核心網段匹配驗證
-    is_valid = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current['ip'], re.IGNORECASE))
+    # 1. 核心網段獨立判定：只要沒拿到預期的骨幹網段，不論是不是第一趟，一律打叉亮紅燈
+    is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN,  current['ip'], re.IGNORECASE))
     
-    # 1. 處理【是否抵達 BR】與【綜合判定】標籤樣式 (還原附圖視覺)
-    if is_valid:
-        reached_br_html = f"""<div class="text-emerald-400 font-medium flex items-center gap-1 text-xs">
-            <span>✓ B-{br_name}</span>
-        </div>
-        <div class="text-[11px] text-slate-400 ip-mono mt-0.5">{current['ip']}</div>"""
-        
-        judgement_html = """<div class="text-emerald-400 font-medium flex items-center gap-1 text-xs">
-            <span>✓ 國內外正常</span>
-        </div>"""
+    if is_valid_route:
+        reached_br = ("text-emerald-400", "✓", br_name)
     else:
-        last_node_ip = current['ip'] if current['ip'] else "無回應"
-        reached_br_html = f"""<div class="text-rose-400 font-medium flex items-center gap-1 text-xs">
-            <span>✕ 未抵達 BR</span>
-        </div>
-        <div class="text-[11px] text-rose-300/70 ip-mono mt-0.5">{last_node_ip}</div>"""
-        
-        judgement_html = """<div class="text-rose-400 font-medium flex items-center gap-1 text-xs">
-            <span>✕ 路由異常</span>
-        </div>"""
+        reached_br = ("text-rose-400", "✕", "未抵達 BR")
 
-    # 2. 處理【跳數、基準與差值】格式 (如：8 (基:7 / 差:+1))
+    # 2. 歷史基準跳數比對與差值計算
     if baseline is None:
-        hop_html = f"""<div class="text-sm font-medium text-white">{current['hop'] if current['hop'] else '-'}</div>
-        <div class="text-[10px] text-slate-500">(新基準建立)</div>"""
-        status_text = "正常連通" if is_valid else "未達核心網段"
+        hop_cell = f"<div class='text-sm font-medium'>{current['hop'] if current['hop'] else '-'}</div><div class='text-xs text-slate-400'>(新基準建立)</div>"
+        status_text = "新項目基準已建立" if is_valid_route else "路由中斷/異常"
+        judgement = ("text-emerald-400", "✓", "正常") if is_valid_route else ("text-rose-400", "✕", "錯誤")
     else:
+        # 當快取存在，精準計算當前跳數與初始基準的差值
         diff = current['hop'] - baseline['hop'] if current['hop'] is not None and baseline.get('hop') is not None else 0
         diff_sign = f"+{diff}" if diff > 0 else f"{diff}"
-        hop_html = f"""<div class="text-sm font-medium text-white">{current['hop'] if current['hop'] is not None else '-'}</div>
-        <div class="text-[10px] text-slate-400">(基:{baseline['hop']} / 差:{diff_sign})</div>"""
-        status_text = f"正常抵達 {br_name}" if is_valid else "路徑偏差/異常"
+        hop_cell = f"<div class='text-sm font-medium'>{current['hop'] if current['hop'] is not None else '-'}</div><div class='text-xs text-slate-400'>(基:{baseline['hop']} / 差:{diff_sign})</div>"
+        
+        if is_valid_route:
+            judgement = ("text-emerald-400", "✓", "正常")
+            status_text = f"正常抵達 {br_name} ({diff_sign})"
+        else:
+            judgement = ("text-rose-400", "✕", "錯誤")
+            status_text = f"最後回應: {current['ip'] if current['ip'] else '無回應'}"
 
-    # 封裝大氣、具微幅懸停效果的深色表格 Row
+    # 封裝表格組件
+    ip_cell = f"<div class='text-sm ip-mono text-cyan-300 font-semibold'>{ip}</div><div class='text-xs text-slate-400'>{net}</div>"
+    component_cell = f"<div class='text-sm'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
+    last_node = current['ip'] if current['ip'] else "<span class='text-rose-300'>無回應</span>"
+    last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>最後一跳</div>"
+    
+    reached_cls, _, reached_label = reached_br
+    reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><span>{reached_label}</span></div>"
+    
+    status_cell = f"<div class='text-sm'>{status_text}</div>"
+    judgement_cls, _, judgement_label = judgement
+    judgement_cell = f"<div class='inline-flex items-center gap-2 {judgement_cls} font-semibold'><span>{judgement_label}</span></div>"
+
+    log_file = f"logs/{ip}.log"
+    view_btn = f"<a class='px-3 py-1 text-sm text-sky-500 bg-sky-900/30 rounded-md hover:bg-sky-800/40 transition' href='{log_file}' target='_blank'>查看</a>"
+
     return f"""
-    <tr class="hover:bg-slate-800/30 transition border-b border-slate-800/40 text-slate-300">
-      <td class="px-6 py-4">
-        <div class="text-sm font-semibold text-cyan-300 ip-mono">{ip}</div>
-        <div class="text-[11px] text-slate-500 mt-0.5">{net}</div>
-      </td>
-      <td class="px-6 py-4">
-        <div class="text-sm font-medium text-slate-200">{component}</div>
-        <div class="text-[11px] text-slate-500 mt-0.5">{nat_group}</div>
-      </td>
-      <td class="px-6 py-4 text-center">{hop_html}</td>
-      <td class="px-6 py-4">
-        <div class="text-xs text-sky-400 ip-mono font-medium">{current['ip'] if current['ip'] else '<span class="text-slate-600">* * *</span>'}</div>
-      </td>
-      <td class="px-6 py-4">{reached_br_html}</td>
-      <td class="px-4 py-4">{judgement_html}</td>
-      <td class="px-6 py-4 text-center">
-        <a class="px-2.5 py-1 text-xs text-cyan-400 bg-cyan-950/40 border border-cyan-800/30 rounded-md hover:bg-cyan-900/60 transition" href="logs/{ip}.log" target="_blank">查看</a>
-      </td>
+    <tr class="hover:bg-slate-800/50 transition-transform transform hover:-translate-y-0.5">
+      <td class="px-4 py-4">{ip_cell}</td>
+      <td class="px-4 py-4">{component_cell}</td>
+      <td class="px-4 py-4 text-center">{hop_cell}</td>
+      <td class="px-4 py-4">{last_node_cell}</td>
+      <td class="px-4 py-4">{reached_cell}</td>
+      <td class="px-4 py-4">{status_cell}</td>
+      <td class="px-4 py-4 text-center">{judgement_cell}</td>
+      <td class="px-4 py-4 text-center">{view_btn}</td>
     </tr>
     """
 
@@ -161,14 +165,14 @@ def main():
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     meta_map = {
-        "2001:B400:E200::1": {"net": "IPv6 行網巡檢", "comp": "2L3EPG1", "group": "NAT7/8"},
-        "2001:B400:E250::1": {"net": "IPv6 行網巡檢", "comp": "2L3EPG2", "group": "NAT7/8"},
-        "2001:B400:E2A0::1": {"net": "IPv6 行網巡檢", "comp": "2L3EPG3", "group": "NAT7/8"},
-        "2001:B400:E260::1": {"net": "IPv6 行網巡檢", "comp": "2L3EPG4", "group": "NAT7/8"},
-        "2001:B400:E300::1": {"net": "IPv6 行網巡檢", "comp": "3L1EPG1", "group": "NAT7/8"},
-        "2001:B400:E350::1": {"net": "IPv6 行網巡檢", "comp": "3L1EPG2", "group": "NAT7/8"},
-        "2001:B400:E3A0::1": {"net": "IPv6 行網巡檢", "comp": "3L1EPG3", "group": "NAT7/8"},
-        "2001:B400:E3E0::1": {"net": "IPv6 行網巡檢", "comp": "3L1EPG4U", "group": "NAT7/8"},
+        "2001:B400:E200::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG1", "group": "NAT7/8"},
+        "2001:B400:E250::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG2", "group": "NAT7/8"},
+        "2001:B400:E2A0::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG3", "group": "NAT7/8"},
+        "2001:B400:E260::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG4", "group": "NAT7/8"},
+        "2001:B400:E300::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG1", "group": "NAT7/8"},
+        "2001:B400:E350::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG2", "group": "NAT7/8"},
+        "2001:B400:E3A0::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG3", "group": "NAT7/8"},
+        "2001:B400:E3E0::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG4U", "group": "NAT7/8"},
     }
 
     for ip in IPS:
@@ -182,16 +186,19 @@ def main():
         current = {"hop": hop, "ip": last_ip, "raw": tr_out, "ts": now}
         bl = baseline.get(ip)
         
-        meta = meta_map.get(ip, {"net": "IPv6 新增網段", "comp": "UNKNOWN", "group": "NAT7/8"})
-        is_valid = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current['ip'], re.IGNORECASE))
+        meta = meta_map[ip]
+        # 嚴格驗證機制：獨立校驗是否抵達指定的中華電信行動核心骨幹網段
+        is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN,  current['ip'], re.IGNORECASE))
         
-        if is_valid:
+        # 統計卡片數值更新邏輯優化
+        if is_valid_route:
             ok_count += 1
         else:
             bad_count += 1
 
         if bl is None:
-            if is_valid and current['hop'] > 0:
+            # 只有當路由100%正確抵達時，才允許將目前的跳數和 IP 自動鎖定為未來比對的起點基準
+            if is_valid_route and current['hop'] > 0:
                 baseline[ip] = {"hop": current['hop'], "ip": current['ip'], "created": now}
                 save_baseline(baseline)
             row = build_row_html(ip, meta["net"], meta["comp"], meta["group"], None, current)
@@ -208,12 +215,13 @@ def main():
     rows_html = "\n".join(rows)
     out_html = tpl.replace("<!-- TABLE_ROWS -->", rows_html)
     
+    # 將即時統計傳遞給頂部卡片（正常數/異常數）
     meta_js = f"<script>window.__MONITOR_META__ = {{ last_updated: '{now}', total: {len(IPS)}, ok: {ok_count}, bad: {bad_count} }};</script>\n"
     out_html = out_html.replace("<body", f"{meta_js}<body", 1)
 
     OUTPUT.write_text(out_html, encoding='utf-8')
     (BASE_DIR / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"巡檢完成。正常(綠燈): {ok_count}, 異常(紅燈): {bad_count}")
+    print(f"IPv6 巡檢完成。正常(綠燈): {ok_count}, 異常(紅燈): {bad_count}")
 
 if __name__ == "__main__":
     main()
