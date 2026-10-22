@@ -13,7 +13,7 @@ OUTPUT = BASE_DIR / "index.html"
 BASELINE_FILE = BASE_DIR / "baseline.json"
 LOG_DIR = BASE_DIR / "logs"
 
-IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1", 
+IPS = ["2001:B400:E100::1", "2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400:E260::1", 
        "2001:B400:E300::1", "2001:B400:E350::1", "2001:B400:E3A0::1", "2001:B400:E3E0::1",
        "2001:B400:E400::1", "2001:B400:E450::1", "2001:B400:E4A0::1", "2001:B400:E500::1",   
        "2001:B400:E700::1", "2001:B400:E750::1", "2001:B400:E7A0::1", "2001:B400:E600::1", 
@@ -177,22 +177,23 @@ def main():
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
 
     meta_map = {
-        "2001:B400:E200::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG1", "group": ""},
-        "2001:B400:E250::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG2", "group": ""},
-        "2001:B400:E2A0::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG3", "group": ""},
-        "2001:B400:E260::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG4", "group": ""},
-        "2001:B400:E300::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG1", "group": ""},
-        "2001:B400:E350::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG2", "group": ""},
-        "2001:B400:E3A0::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG3", "group": ""},
-        "2001:B400:E3E0::1": {"net": "IPv6 網段巡檢", "comp": "3L1EPG4U", "group": ""},
-        "2001:B400:E400::1": {"net": "IPv6 網段巡檢", "comp": "4L1EPG1", "group": ""},
-        "2001:B400:E450::1": {"net": "IPv6 網段巡檢", "comp": "4L1EPG2", "group": ""},
-        "2001:B400:E4A0::1": {"net": "IPv6 網段巡檢", "comp": "4L1EPG3", "group": ""},
-        "2001:B400:E500::1": {"net": "IPv6 網段巡檢", "comp": "CHCH", "group": ""},
-        "2001:B400:E700::1": {"net": "IPv6 網段巡檢", "comp": "7L2EPG1", "group": ""},
-        "2001:B400:E750::1": {"net": "IPv6 網段巡檢", "comp": "7L2EPG2", "group": ""},
-        "2001:B400:E7A0::1": {"net": "IPv6 網段巡檢", "comp": "7L2EPG3", "group": ""},
-        "2001:B400:E600::1": {"net": "IPv6 網段巡檢", "comp": "TNE1", "group": ""},
+        "2001:B400:E100::1": {"net": "IPv6 網段巡檢", "comp": "G-2L1", "group": ""},
+        "2001:B400:E200::1": {"net": "IPv6 網段巡檢", "comp": "G-2L3-1", "group": ""},
+        "2001:B400:E250::1": {"net": "IPv6 網段巡檢", "comp": "G-2L3-2", "group": ""},
+        "2001:B400:E2A0::1": {"net": "IPv6 網段巡檢", "comp": "G-2L3-3", "group": ""},
+        "2001:B400:E260::1": {"net": "IPv6 網段巡檢", "comp": "G-2L3-4", "group": ""},
+        "2001:B400:E300::1": {"net": "IPv6 網段巡檢", "comp": "G-3L1-1", "group": ""},
+        "2001:B400:E350::1": {"net": "IPv6 網段巡檢", "comp": "G-3L1-2", "group": ""},
+        "2001:B400:E3A0::1": {"net": "IPv6 網段巡檢", "comp": "G-3L1-3", "group": ""},
+        "2001:B400:E3E0::1": {"net": "IPv6 網段巡檢", "comp": "G-3L14U", "group": ""},
+        "2001:B400:E400::1": {"net": "IPv6 網段巡檢", "comp": "G-4L1-1", "group": ""},
+        "2001:B400:E450::1": {"net": "IPv6 網段巡檢", "comp": "G-4L1-2", "group": ""},
+        "2001:B400:E4A0::1": {"net": "IPv6 網段巡檢", "comp": "G-4L1-3", "group": ""},
+        "2001:B400:E500::1": {"net": "IPv6 網段巡檢", "comp": "G-CHCH", "group": ""},
+        "2001:B400:E700::1": {"net": "IPv6 網段巡檢", "comp": "G-7L2-1", "group": ""},
+        "2001:B400:E750::1": {"net": "IPv6 網段巡檢", "comp": "G-7L2-2", "group": ""},
+        "2001:B400:E7A0::1": {"net": "IPv6 網段巡檢", "comp": "G-7L2-3", "group": ""},
+        "2001:B400:E600::1": {"net": "IPv6 網段巡檢", "comp": "G-TNE1", "group": ""},
     }
 
     for ip in IPS:
