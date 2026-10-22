@@ -173,7 +173,8 @@ def main():
     rows = []
     ok_count = 0
     bad_count = 0
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
 
     meta_map = {
         "2001:B400:E200::1": {"net": "IPv6 網段巡檢", "comp": "2L3EPG1", "group": ""},
