@@ -21,6 +21,7 @@ IPS = ["2001:B400:E200::1", "2001:B400:E250::1", "2001:B400:E2A0::1", "2001:B400
 # 中華電信行動網路 IPv6 核心骨幹預期正確網段
 EXPECTED_LAST_HOP_PATTERN = r"^2001:b400:15[678]:"
 EXPECTED_LAST_HOP_PATTERN2 = r"^2001:b000:80:[08]:"
+
 BR_NAME = "CHTM BR"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -165,7 +166,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, route_statu
 def main():
     # 更新正規表示式
     EXPECTED_LAST_HOP_PATTERN = r"^2001:b400:15[6789]:"
-    EXPECTED_LAST_HOP_PATTERN2 = r"^2001:b000:80:0:"
+    EXPECTED_LAST_HOP_PATTERN2 = r"^2001:b000:80:[08]:"
 
     baseline = load_baseline()
     results = {}
