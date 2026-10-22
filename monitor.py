@@ -101,46 +101,53 @@ def save_baseline(data):
 
 def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_NAME):
     """
-    修改重點：全面調亮文字顏色（text-slate-200 / text-white），確保深色背景下字體清晰
+    修改重點：全面調亮文字與底色，消除暗淡、低對比的情況，提升整體視覺感受。
     """
     is_valid_route = current['ip'] and bool(re.match(EXPECTED_LAST_HOP_PATTERN, current['ip'], re.IGNORECASE))
     
     if is_valid_route:
-        reached_br = ("text-emerald-400", "✓", br_name)
+        reached_br = ("text-emerald-400 font-bold bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 rounded", "✓", br_name)
     else:
-        reached_br = ("text-rose-400", "✕", "未抵達 BR")
+        reached_br = ("text-rose-400 font-bold bg-rose-950/40 border border-rose-500/20 px-2 py-1 rounded", "✕", "未抵達 BR")
+    
     if baseline is None:
-        hop_cell = f"<div class='text-sm font-medium text-white'>{current['hop'] if current['hop'] else '-'}</div><div class='text-xs text-slate-400'>(新基準建立)</div>"
+        hop_cell = f"<div class='text-sm font-bold text-white'>{current['hop'] if current['hop'] else '-'}</div><div class='text-xs text-amber-400 font-semibold'>(新基準建立)</div>"
         status_text = "新項目基準已建立" if is_valid_route else "路由中斷/異常"
-        judgement = ("text-emerald-400", "✓", "正常") if is_valid_route else ("text-rose-400", "✕", "錯誤")
+        judgement = ("text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-full font-bold", "✓", "正常") if is_valid_route else ("text-rose-400 bg-rose-950/60 border border-rose-500/30 px-2.5 py-1 rounded-full font-bold", "✕", "錯誤")
     else:
         diff = current['hop'] - baseline['hop'] if current['hop'] is not None and baseline.get('hop') is not None else 0
         diff_sign = f"+{diff}" if diff > 0 else f"{diff}"
-        hop_cell = f"<div class='text-sm font-medium text-white'>{current['hop'] if current['hop'] is not None else '-'}</div><div class='text-xs text-slate-400'>(基:{baseline['hop']} / 差:{diff_sign})</div>"
+        
+        # 動態針對數值差給予顏色提示
+        diff_cls = "text-amber-400" if diff != 0 else "text-slate-400"
+        hop_cell = f"<div class='text-sm font-bold text-white'>{current['hop'] if current['hop'] is not None else '-'}</div><div class='text-xs {diff_cls}'>(基準:{baseline['hop']} / 差:<span class='font-bold'>{diff_sign}</span>)</div>"
         
         if is_valid_route:
-            judgement = ("text-emerald-400", "✓", "正常")
+            judgement = ("text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-full font-bold", "✓", "正常")
             status_text = f"正常抵達 {br_name} ({diff_sign})"
         else:
-            judgement = ("text-rose-400", "✕", "錯誤")
+            judgement = ("text-rose-400 bg-rose-950/60 border border-rose-500/30 px-2.5 py-1 rounded-full font-bold", "✕", "錯誤")
             status_text = f"最後回應: {current['ip'] if current['ip'] else '無回應'}"
-    # 調高文字對比度 (text-cyan-300 / text-slate-200 / text-sky-400)，消滅看不清的問題
-    ip_cell = f"<div class='text-sm ip-mono text-cyan-300 font-semibold'>{ip}</div><div class='text-xs text-slate-400'>{net}</div>"
-    component_cell = f"<div class='text-sm text-slate-200 font-medium'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
+            
+    # 調高文字對比度：IP 與元件改用高亮度亮天藍/純白字
+    ip_cell = f"<div class='text-sm ip-mono text-cyan-300 font-bold'>{ip}</div><div class='text-xs text-slate-300 font-medium'>{net}</div>"
+    component_cell = f"<div class='text-sm text-white font-bold'>{component}</div><div class='text-xs text-slate-300 font-medium'>{nat_group}</div>"
     
-    last_node = current['ip'] if current['ip'] else "<span class='text-rose-400 font-medium'>* * *</span>"
-    last_node_cell = f"<div class='text-sm ip-mono text-sky-400 font-medium'>{last_node}</div><div class='text-xs text-slate-400'>最後一跳</div>"
+    last_node = current['ip'] if current['ip'] else "<span class='text-rose-400 font-bold animate-pulse'>* * * (無回應)</span>"
+    last_node_cell = f"<div class='text-sm ip-mono text-sky-200 font-semibold'>{last_node}</div><div class='text-xs text-slate-400'>最後一跳</div>"
     
     reached_cls, _, reached_label = reached_br
-    reached_cell = f"<div class='inline-flex items-center gap-2 {reached_cls} font-medium'><span>{reached_label}</span></div>"
+    reached_cell = f"<div class='inline-flex items-center gap-1 {reached_cls}'><span>{reached_label}</span></div>"
     
-    status_cell = f"<div class='text-sm text-slate-200'>{status_text}</div>"
+    status_cell = f"<div class='text-sm text-slate-100 font-medium'>{status_text}</div>"
     judgement_cls, _, judgement_label = judgement
-    judgement_cell = f"<div class='inline-flex items-center gap-2 {judgement_cls} font-semibold'><span>{judgement_label}</span></div>"
+    judgement_cell = f"<div class='inline-flex items-center gap-1.5 {judgement_cls}'><span>{judgement_label}</span></div>"
+    
     log_file = f"logs/{ip}.log"
-    view_btn = f"<a class='px-3 py-1 text-xs text-cyan-400 bg-cyan-950/40 border border-cyan-800/40 rounded-md hover:bg-cyan-900/60 transition' href='{log_file}' target='_blank'>查看</a>"
+    view_btn = f"<a class='px-3.5 py-1.5 text-xs text-cyan-200 bg-cyan-900/50 border border-cyan-500/30 rounded hover:bg-cyan-800/80 active:scale-95 transition-all font-bold shadow-sm' href='{log_file}' target='_blank'>查看日誌</a>"
+    
     return f"""
-    <tr class="hover:bg-slate-800/30 transition border-b border-slate-800/50 text-slate-300">
+    <tr class="hover:bg-slate-800/50 transition-colors duration-150 border-b border-slate-800/80">
       <td class="px-6 py-4">{ip_cell}</td>
       <td class="px-6 py-4">{component_cell}</td>
       <td class="px-6 py-4 text-center">{hop_cell}</td>
@@ -151,6 +158,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, br_name=BR_
       <td class="px-6 py-4 text-center">{view_btn}</td>
     </tr>
     """
+
 
 def main():
     baseline = load_baseline()
