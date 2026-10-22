@@ -24,33 +24,44 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
   <style>
-    .panel-border { box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 6px 30px rgba(2,6,23,0.6); border:1px solid rgba(255,255,255,0.04); backdrop-filter: blur(6px); }
-    .frost { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
-    .ip-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace; }
+    .panel-border { 
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 243, 255, 0.05);
+      backdrop-filter: blur(12px); 
+    }
+    .frost { 
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%); 
+    }
+    .ip-mono { 
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace; 
+    }
+    #refreshBtn {
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+    }
   </style>
 </head>
-<body class="bg-bg-panel text-slate-200 antialiased min-h-screen font-sans">
+<body class="bg-bg-panel text-slate-100 antialiased min-h-screen font-sans">
   <div class="max-w-7xl mx-auto px-6 py-8">
     <!-- Header -->
-    <header class="flex items-start justify-between mb-8">
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
       <div class="flex items-start gap-6">
         <div class="flex flex-col">
-          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight leading-tight text-transparent bg-clip-text" style="background-image: linear-gradient(90deg,#06b6d4,#16a085);">
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight leading-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400">
             IPv6路由巡檢與導入監控儀表板
           </h1>
-          <div class="mt-2 flex gap-4 text-sm text-slate-300/80">
-            <div class="flex flex-col">
-              <span class="text-xs text-slate-400 uppercase">探測來源</span>
-              <span class="text-sm">Taiwan 探針</span>
+          <div class="mt-2 flex gap-4 text-sm text-slate-300">
+            <div class="flex flex-col border-r border-slate-800 pr-4">
+              <span class="text-xs text-slate-400 uppercase tracking-wider">探測來源</span>
+              <span class="text-sm font-semibold">Taiwan 探針 (GlobalPing)</span>
+            </div>
+            <div class="flex flex-col border-r border-slate-800 pr-4">
+              <span class="text-xs text-slate-400 uppercase tracking-wider">巡檢週期</span>
+              <span class="text-sm font-semibold">每 30 分鐘自動 Traceroute</span>
             </div>
             <div class="flex flex-col">
-              <span class="text-xs text-slate-400 uppercase">巡檢週期</span>
-              <span class="text-sm">每 30 分鐘自動 Traceroute</span>
-            </div>
-            <div class="flex flex-col">
-              <span class="text-xs text-slate-400 uppercase">畫面狀態</span>
-              <span class="text-sm inline-flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm"></span>
+              <span class="text-xs text-slate-400 uppercase tracking-wider">畫面狀態</span>
+              <span class="text-sm inline-flex items-center gap-2 font-semibold text-emerald-400">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 運作中
               </span>
             </div>
@@ -59,86 +70,88 @@
       </div>
 
       <div class="flex items-center gap-4">
-        <div class="text-xs text-slate-400 mr-2">最後更新</div>
-        <div id="lastUpdated" class="text-sm text-slate-300">--</div>
+        <div class="flex flex-col items-end">
+          <span class="text-xs text-slate-400 uppercase">最後更新時間</span>
+          <span id="lastUpdated" class="text-sm font-medium text-cyan-300">--</span>
+        </div>
 
-        <button id="refreshBtn" class="ml-4 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 active:scale-95 transition transform shadow-sm panel-border" title="手動刷新畫面">
+        <button id="refreshBtn" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 active:scale-95 transition transform shadow-md border border-blue-400/20" title="手動刷新畫面">
           <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.5 18A8.5 8.5 0 0118 5.5" />
           </svg>
-          <span class="text-sm font-medium text-white">手動刷新畫面</span>
+          <span class="text-sm font-bold text-white">手動刷新畫面</span>
         </button>
       </div>
     </header>
 
     <!-- Stats cards -->
-    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-      <div class="panel-border frost p-4 rounded-xl flex items-center justify-between">
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+      <div class="panel-border frost p-5 rounded-xl flex items-center justify-between">
         <div>
-          <div class="text-sm text-slate-300/80">監控目標總數</div>
-          <div id="stat_total" class="mt-1 text-2xl md:text-3xl font-extrabold">--</div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">監控目標總數</div>
+          <div id="stat_total" class="mt-2 text-3xl font-extrabold text-white">--</div>
         </div>
-        <div class="text-slate-400 text-sm">詳細 ›</div>
+        <div class="text-cyan-400 text-sm font-medium bg-cyan-950/40 px-2.5 py-1 rounded-full border border-cyan-800/30">詳細 ›</div>
       </div>
 
-      <div class="panel-border frost p-4 rounded-xl flex items-center justify-between">
+      <div class="panel-border frost p-5 rounded-xl flex items-center justify-between">
         <div>
-          <div class="text-sm text-slate-300/80">正常連通</div>
-          <div id="stat_ok" class="mt-1 text-2xl md:text-3xl font-extrabold text-emerald-400">--</div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">正常連通</div>
+          <div id="stat_ok" class="mt-2 text-3xl font-extrabold text-emerald-400">--</div>
         </div>
-        <div class="text-slate-400 text-sm">良好</div>
+        <div class="text-emerald-400 text-sm font-medium bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-800/30">良好</div>
       </div>
 
-      <div class="panel-border frost p-4 rounded-xl flex items-center justify-between">
+      <div class="panel-border frost p-5 rounded-xl flex items-center justify-between">
         <div>
-          <div class="text-sm text-slate-300/80">異常 / 導入中</div>
-          <div id="stat_bad" class="mt-1 text-2xl md:text-3xl font-extrabold text-slate-400">--</div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">異常 / 導入中</div>
+          <div id="stat_bad" class="mt-2 text-3xl font-extrabold text-rose-400">--</div>
         </div>
-        <div class="text-slate-400 text-sm">無</div>
+        <div class="text-rose-400 text-sm font-medium bg-rose-950/40 px-2.5 py-1 rounded-full border border-rose-800/30">注意</div>
       </div>
     </section>
 
     <!-- Table -->
-    <section class="panel-border rounded-2xl overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-700/30 bg-gradient-to-b from-transparent to-black/10">
+    <section class="panel-border rounded-2xl overflow-hidden bg-slate-900/40">
+      <div class="px-6 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 to-transparent">
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-slate-100">核心數據</h2>
-          <div class="text-sm text-slate-400">深色表格 · 具有邊框與懸停效果</div>
+          <h2 class="text-lg font-bold text-white tracking-wide">核心監控數據明細</h2>
+          <span class="px-2.5 py-1 text-xs font-semibold bg-slate-800 text-slate-300 rounded-md">深色高對比表格</span>
         </div>
       </div>
 
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-700 text-sm">
-          <thead class="bg-slate-900/60">
-            <tr class="text-slate-300/90">
-              <th class="px-4 py-3 text-left">目標IP/所屬網段</th>
-              <th class="px-4 py-3 text-left">元件</th>
-              <th class="px-4 py-3 text-center">跳數(基準/差值)</th>
-              <th class="px-4 py-3 text-left">最終回應節點</th>
-              <th class="px-4 py-3 text-left">是否抵達BR/EPG</th>
-              <th class="px-4 py-3 text-left">路由狀態摘要</th>
-              <th class="px-4 py-3 text-center">判定</th>
-              <th class="px-4 py-3 text-center">路由日誌</th>
+        <table class="min-w-full divide-y divide-slate-800 text-sm">
+          <thead class="bg-slate-950/80">
+            <tr class="text-slate-200 font-semibold border-b border-slate-800">
+              <th class="px-6 py-4 text-left">目標IP / 所屬網段</th>
+              <th class="px-6 py-4 text-left">服務元件名稱</th>
+              <th class="px-6 py-4 text-center">跳數(基準/當前差值)</th>
+              <th class="px-6 py-4 text-left">最終回應節點 IP</th>
+              <th class="px-6 py-4 text-left">抵達 BR/EPG</th>
+              <th class="px-6 py-4 text-left">路由狀態摘要</th>
+              <th class="px-6 py-4 text-center">狀態判定</th>
+              <th class="px-6 py-4 text-center">路由日誌</th>
             </tr>
           </thead>
-          <tbody id="tableBody" class="bg-slate-900/40 divide-y divide-slate-700">
+          <tbody id="tableBody" class="divide-y divide-slate-800/60 bg-slate-900/20">
             <!-- TABLE_ROWS -->
           </tbody>
         </table>
       </div>
 
-      <div class="px-6 py-4 border-t border-slate-700/30 bg-slate-900/20 text-sm text-slate-400" id="tableFooter">
+      <div class="px-6 py-4 border-t border-slate-800 bg-slate-950/40 text-sm font-medium text-slate-300" id="tableFooter">
         顯示 -- / -- 筆
       </div>
     </section>
 
-    <footer class="mt-8 text-xs text-slate-500">
-      註：資料由後端排程產生；「查看」按鈕可連接詳細路由日誌。
+    <footer class="mt-8 text-xs text-slate-500 flex justify-between items-center">
+      <span>註：本系統之探測資料由背景排程自動更新；「查看」按鈕可串接至該 IP 的詳細歷史 Trace 記錄。</span>
+      <span class="text-slate-600">v1.2.0-Optimized</span>
     </footer>
   </div>
 
   <script>
-    // 小工具：當頁面由腳本寫入後可用 JS 更新統計數字 (若腳本有寫入相應 meta 資訊)
     const lastUpdatedMeta = document.getElementById('lastUpdated');
     if (window.__MONITOR_META__) {
       lastUpdatedMeta.textContent = window.__MONITOR_META__.last_updated || '--';
@@ -147,8 +160,7 @@
       document.getElementById('stat_bad').textContent = window.__MONITOR_META__.bad || '--';
       document.getElementById('tableFooter').textContent = `顯示 1-${window.__MONITOR_META__.total || '--'} / ${window.__MONITOR_META__.total || '--'} 筆`;
     }
-    // Refresh button (client-side only) - 重新載入頁面
-    document.getElementById('refreshBtn').addEventListener('click', ()=> location.reload());
+    document.getElementById('refreshBtn').addEventListener('click', () => location.reload());
   </script>
 </body>
 </html>
