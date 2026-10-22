@@ -160,7 +160,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, route_statu
       <td class="px-4 py-4 text-center">{judgement_cell}</td>
       <td class="px-6 py-4 text-center">{view_btn}</td>
     </tr>
-    \"\"\"
+    """
 
 def main():
     # 更新正規表示式
