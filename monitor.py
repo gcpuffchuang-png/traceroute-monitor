@@ -149,7 +149,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, route_statu
     log_file = f"logs/{ip}.log"
     view_btn = f"<a class='px-3 py-1 text-xs text-cyan-300 bg-cyan-950/60 border border-cyan-800/50 rounded-md hover:bg-cyan-900/80 transition' href='{log_file}' target='_blank'>查看</a>"
 
-    return f\"\"\"
+    return f"""
     <tr class="hover:bg-slate-800/40 transition-colors duration-200 border-b border-slate-800/50 text-slate-300">
       <td class="px-6 py-4">{ip_cell}</td>
       <td class="px-6 py-4">{component_cell}</td>
