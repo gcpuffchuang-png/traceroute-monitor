@@ -107,10 +107,10 @@ def build_row_html(ip, net, component, nat_group, baseline, current, route_statu
 
     if route_status == "EPG":
         reached_br = ("text-emerald-400", "✓", epg_name)
-        status_text_base = f"正常抵達 {epg_name}"
+        status_text_base = f"抵達 {epg_name}"
     elif route_status == "BR":
         reached_br = ("text-cyan-400", "✓", br_name) # 使用不同顏色區分
-        status_text_base = f"正常抵達 {br_name}"
+        status_text_base = f"抵達 {br_name}"
     else:
         reached_br = ("text-rose-400", "✕", "未抵達")
         status_text_base = "路由中斷/異常"
@@ -130,7 +130,7 @@ def build_row_html(ip, net, component, nat_group, baseline, current, route_statu
             status_text = f"{status_text_base} ({diff_sign})"
         else:
             judgement = ("text-rose-400", "✕", "錯誤")
-            status_text = f"最後回應: {current['ip'] if current['ip'] else '無回應'}"
+            status_text = f"回應: {current['ip'] if current['ip'] else '無回應'}"
 
     ip_cell = f"<div class='text-sm ip-mono text-sky-300 font-semibold'>{ip}</div><div class='text-xs text-slate-400'>{net}</div>"
     component_cell = f"<div class='text-sm text-slate-100 font-medium'>{component}</div><div class='text-xs text-slate-400'>{nat_group}</div>"
